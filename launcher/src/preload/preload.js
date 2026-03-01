@@ -34,6 +34,10 @@ contextBridge.exposeInMainWorld('launcher', {
     // Обновления
     checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
     getNews: () => ipcRenderer.invoke('app:getNews'),
+    getReleases: () => ipcRenderer.invoke('app:getReleases'),
+    getCommits: () => ipcRenderer.invoke('app:getCommits'),
+    selectDevBuild: (build) => ipcRenderer.invoke('app:selectDevBuild', build),
+    applyModUpdate: (assetInfo) => ipcRenderer.invoke('app:applyModUpdate', assetInfo),
 
     // Переустановка / очистка
     reinstallClient: () => ipcRenderer.invoke('minecraft:reinstall'),

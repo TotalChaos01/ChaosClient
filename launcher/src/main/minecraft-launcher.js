@@ -381,10 +381,57 @@ class MinecraftLauncher extends EventEmitter {
     }
 
     async _installClientMod(modsDir) {
+        // Remove any old ChaosClient jars first
+        try {
+            const existingMods = fs.readdirSync(modsDir).filter(f => f.startsWith('ChaosClient') && f.endsWith('.jar'));
+            for (const old of existingMods) {
+                fs.unlinkSync(path.join(modsDir, old));
+            }
+        } catch (e) { /* ignore */ }
+
+        // Determine update channel
+        const channel = this.store.get('updateChannel') || 'release';
+        const selectedDevBuild = this.store.get('selectedDevBuild') || null;
+
+        // DEV channel: use selected commit build if available
+        if (channel === 'dev' && selectedDevBuild && selectedDevBuild.downloadUrl) {
+            const destPath = path.join(modsDir, selectedDevBuild.fileName || 'ChaosClient-dev.jar');
+            try {
+                this._log('info', `Загрузка дев-билда: ${selectedDevBuild.fileName}...`);
+                await this._downloadFile(selectedDevBuild.downloadUrl, destPath);
+                this._log('info', `ChaosClient дев-билд установлен: ${selectedDevBuild.fileName}`);
+                return;
+            } catch (e) {
+                this._log('warn', `Не удалось скачать дев-билд: ${e.message}, пробуем release...`);
+            }
+        }
+
+        // RELEASE channel: download from GitHub releases
+        try {
+            const releasesUrl = 'https://api.github.com/repos/TotalChaos01/ChaosClient/releases/latest';
+            const release = await this._fetchJson(releasesUrl);
+            if (release?.assets) {
+                const modAsset = release.assets.find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient'));
+                if (modAsset) {
+                    const destPath = path.join(modsDir, modAsset.name);
+                    // Check if we already have this exact version
+                    if (fs.existsSync(destPath) && fs.statSync(destPath).size === modAsset.size) {
+                        this._log('info', `ChaosClient мод актуален (${modAsset.name})`);
+                        return;
+                    }
+                    this._log('info', `Загрузка ChaosClient ${release.tag_name} с GitHub...`);
+                    await this._downloadFile(modAsset.browser_download_url, destPath);
+                    this._log('info', `ChaosClient мод обновлён до ${release.tag_name}`);
+                    return;
+                }
+            }
+        } catch (e) {
+            this._log('warn', `Не удалось скачать мод с GitHub: ${e.message}`);
+        }
+
+        // Fallback: use bundled resource
         const modFileName = 'ChaosClient-1.0.0.jar';
         const destPath = path.join(modsDir, modFileName);
-
-        // Check bundled resource first — always overwrite to ensure latest version
         const bundledPaths = [
             path.join(process.resourcesPath || '', modFileName),
             path.join(__dirname, '..', '..', '..', 'build', 'libs', modFileName),
@@ -393,33 +440,10 @@ class MinecraftLauncher extends EventEmitter {
 
         for (const srcPath of bundledPaths) {
             if (fs.existsSync(srcPath)) {
-                const srcSize = fs.statSync(srcPath).size;
-                const destSize = fs.existsSync(destPath) ? fs.statSync(destPath).size : 0;
-                if (srcSize !== destSize) {
-                    fs.copyFileSync(srcPath, destPath);
-                    this._log('info', 'ChaosClient мод обновлён (из ресурсов)');
-                } else if (!fs.existsSync(destPath)) {
-                    fs.copyFileSync(srcPath, destPath);
-                    this._log('info', 'ChaosClient мод установлен (из ресурсов)');
-                }
+                fs.copyFileSync(srcPath, destPath);
+                this._log('info', 'ChaosClient мод установлен (из ресурсов, fallback)');
                 return;
             }
-        }
-
-        // Try downloading from GitHub releases
-        try {
-            const releasesUrl = 'https://api.github.com/repos/totalchaos01/ChaosClient-releases/releases/latest';
-            const release = await this._fetchJson(releasesUrl);
-            if (release?.assets) {
-                const modAsset = release.assets.find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient'));
-                if (modAsset) {
-                    await this._downloadFile(modAsset.browser_download_url, destPath);
-                    this._log('info', 'ChaosClient мод скачан с GitHub');
-                    return;
-                }
-            }
-        } catch (e) {
-            this._log('warn', `Не удалось скачать мод с GitHub: ${e.message}`);
         }
 
         this._log('warn', 'ChaosClient мод не найден — будет скопирован при сборке');

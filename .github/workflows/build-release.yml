@@ -1,0 +1,139 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v1.0.1)'
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-mod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Build mod JAR
+        run: ./gradlew build
+
+      - name: Upload mod JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: mod-jar
+          path: build/libs/ChaosClient-*.jar
+
+  build-launcher-linux:
+    needs: build-mod
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Download mod JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: mod-jar
+          path: build/libs/
+
+      - name: Install dependencies
+        working-directory: launcher
+        run: npm ci
+
+      - name: Build AppImage & deb
+        working-directory: launcher
+        run: npx electron-builder --linux AppImage deb
+
+      - name: Upload Linux builds
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-builds
+          path: |
+            launcher/dist/*.AppImage
+            launcher/dist/*.deb
+
+  build-launcher-windows:
+    needs: build-mod
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Download mod JAR
+        uses: actions/download-artifact@v4
+        with:
+          name: mod-jar
+          path: build/libs/
+
+      - name: Install dependencies
+        working-directory: launcher
+        run: npm ci
+
+      - name: Build Windows exe
+        working-directory: launcher
+        run: npx electron-builder --win nsis
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: launcher/dist/*.exe
+
+  create-release:
+    needs: [build-mod, build-launcher-linux, build-launcher-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: List artifacts
+        run: find artifacts/ -type f | head -20
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "ChaosClient ${{ github.ref_name }}"
+          body: |
+            ## ChaosClient ${{ github.ref_name }}
+
+            ### Загрузки
+            - **Windows**: `ChaosClient Launcher Setup *.exe` — установщик для Windows 10/11 x64
+            - **Linux AppImage**: `ChaosClient Launcher-*.AppImage` — универсальный формат для Linux
+            - **Linux deb**: `chaosclient-launcher_*_amd64.deb` — для Ubuntu/Debian
+            - **Мод JAR**: `ChaosClient-*.jar` — мод для Fabric 1.21.11
+
+            ### Установка
+            1. Скачайте лаунчер для вашей ОС
+            2. Запустите лаунчер — он автоматически установит Java 21, Fabric и моды
+            3. Введите никнейм и нажмите "Запуск"
+          draft: false
+          prerelease: false
+          files: |
+            artifacts/mod-jar/*.jar
+            artifacts/linux-builds/*.AppImage
+            artifacts/linux-builds/*.deb
+            artifacts/windows-build/*.exe

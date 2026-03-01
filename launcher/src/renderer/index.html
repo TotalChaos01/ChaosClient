@@ -88,6 +88,10 @@
                     <i class="fas fa-cog"></i>
                     <span>Настройки</span>
                 </button>
+                <button class="nav-btn" data-page="devbuilds" id="nav-devbuilds">
+                    <i class="fas fa-code-branch"></i>
+                    <span>Билды</span>
+                </button>
                 <button class="nav-btn" data-page="logs">
                     <i class="fas fa-terminal"></i>
                     <span>Логи</span>
@@ -322,6 +326,52 @@
                             <button class="btn-action btn-small" id="clear-mods-btn" style="margin-top:8px;"><i class="fas fa-trash"></i> Очистить моды</button>
                             <p class="setting-hint">Удалит все моды, при следующем запуске они скачаются заново</p>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- БИЛДЫ (Dev Builds) -->
+            <div class="page" id="page-devbuilds">
+                <div class="page-header">
+                    <h2><i class="fas fa-code-branch"></i> Билды и обновления</h2>
+                </div>
+                <div class="devbuilds-content">
+                    <!-- Статус обновления -->
+                    <div class="update-status-card" id="update-info-card">
+                        <div class="update-status-header">
+                            <div class="update-status-icon" id="update-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="update-status-text">
+                                <h3 id="update-title">Проверка обновлений...</h3>
+                                <p id="update-subtitle">Текущая версия: 1.0.0</p>
+                            </div>
+                            <button class="btn-action btn-small" id="btn-refresh-updates"><i class="fas fa-sync"></i> Обновить</button>
+                        </div>
+                        <div class="update-actions" id="update-actions" style="display:none;">
+                            <button class="btn-action" id="btn-apply-update"><i class="fas fa-download"></i> Установить обновление</button>
+                            <p class="update-changelog" id="update-changelog"></p>
+                        </div>
+                        <div class="update-progress" id="update-apply-progress" style="display:none;">
+                            <div class="progress-bar"><div class="progress-fill" id="update-progress-fill"></div></div>
+                            <span class="update-progress-text" id="update-progress-text">Загрузка...</span>
+                        </div>
+                    </div>
+
+                    <!-- Переключатель канала -->
+                    <div class="channel-switcher">
+                        <button class="channel-btn active" data-channel="releases" id="ch-releases"><i class="fas fa-tag"></i> Релизы</button>
+                        <button class="channel-btn" data-channel="commits" id="ch-commits"><i class="fas fa-code-commit"></i> Коммиты</button>
+                    </div>
+
+                    <!-- Список релизов -->
+                    <div class="builds-list" id="releases-list">
+                        <div class="builds-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка релизов...</div>
+                    </div>
+
+                    <!-- Список коммитов -->
+                    <div class="builds-list" id="commits-list" style="display:none;">
+                        <div class="builds-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка коммитов...</div>
                     </div>
                 </div>
             </div>

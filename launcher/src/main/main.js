@@ -167,31 +167,163 @@ ipcMain.handle('minecraft:processStats', async () => {
     return mcLauncher.getProcessStats();
 });
 
+// ===== GitHub API helper =====
+const GITHUB_REPO = 'TotalChaos01/ChaosClient';
+const GITHUB_API = `https://api.github.com/repos/${GITHUB_REPO}`;
+
+function githubFetch(urlPath, timeout = 10000) {
+    const https = require('https');
+    const fullUrl = urlPath.startsWith('https://') ? urlPath : `${GITHUB_API}${urlPath}`;
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const settle = (fn, val) => { if (!settled) { settled = true; fn(val); } };
+        const doReq = (url, redirects = 0) => {
+            if (redirects > 5) { settle(reject, new Error('Too many redirects')); return; }
+            const req = https.get(url, {
+                headers: { 'User-Agent': 'ChaosClient-Launcher/1.0', 'Accept': 'application/vnd.github.v3+json' },
+                timeout
+            }, (res) => {
+                if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                    doReq(res.headers.location, redirects + 1); return;
+                }
+                if (res.statusCode !== 200) { settle(reject, new Error(`HTTP ${res.statusCode}`)); return; }
+                let body = '';
+                res.on('data', c => body += c);
+                res.on('end', () => { try { settle(resolve, JSON.parse(body)); } catch (e) { settle(reject, e); } });
+                res.on('error', e => settle(reject, e));
+            });
+            req.on('error', e => settle(reject, e));
+            req.on('timeout', () => { req.destroy(); settle(reject, new Error('Timeout')); });
+        };
+        doReq(fullUrl);
+    });
+}
+
 // ===== Обновления и новости =====
 ipcMain.handle('app:checkUpdate', async () => {
-    // Placeholder — реальная проверка будет через GitHub API
-    return { hasUpdate: false, latestVersion: app.getVersion() };
+    try {
+        const channel = store.get('updateChannel') || 'release';
+        const currentVersion = app.getVersion();
+
+        if (channel === 'release') {
+            const release = await githubFetch('/releases/latest');
+            const latestTag = release.tag_name || '';
+            const latestVersion = latestTag.replace(/^v/, '');
+            const modAsset = (release.assets || []).find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient'));
+            const launcherAssets = (release.assets || []).filter(a =>
+                a.name.endsWith('.AppImage') || a.name.endsWith('.deb') || a.name.endsWith('.exe')
+            );
+            const hasModUpdate = !!modAsset;
+            const hasLauncherUpdate = latestVersion !== currentVersion && launcherAssets.length > 0;
+            return {
+                hasUpdate: hasModUpdate || hasLauncherUpdate,
+                latestVersion,
+                currentVersion,
+                releaseTag: latestTag,
+                releaseName: release.name || latestTag,
+                releaseBody: release.body || '',
+                publishedAt: release.published_at || '',
+                modAsset: modAsset ? { name: modAsset.name, size: modAsset.size, url: modAsset.browser_download_url } : null,
+                launcherAssets: launcherAssets.map(a => ({ name: a.name, size: a.size, url: a.browser_download_url }))
+            };
+        } else {
+            // Dev channel: check pre-releases or latest commits with artifacts
+            const releases = await githubFetch('/releases?per_page=10');
+            const preRelease = releases.find(r => r.prerelease);
+            if (preRelease) {
+                const modAsset = (preRelease.assets || []).find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient'));
+                return {
+                    hasUpdate: !!modAsset,
+                    latestVersion: (preRelease.tag_name || '').replace(/^v/, ''),
+                    currentVersion,
+                    releaseTag: preRelease.tag_name,
+                    releaseName: preRelease.name || preRelease.tag_name,
+                    releaseBody: preRelease.body || '',
+                    publishedAt: preRelease.published_at || '',
+                    isDev: true,
+                    modAsset: modAsset ? { name: modAsset.name, size: modAsset.size, url: modAsset.browser_download_url } : null,
+                    launcherAssets: []
+                };
+            }
+            return { hasUpdate: false, currentVersion, latestVersion: currentVersion };
+        }
+    } catch (e) {
+        return { hasUpdate: false, latestVersion: app.getVersion(), error: e.message };
+    }
+});
+
+// Get all releases (for dev builds picker)
+ipcMain.handle('app:getReleases', async () => {
+    try {
+        const releases = await githubFetch('/releases?per_page=30');
+        return releases.map(r => ({
+            tag: r.tag_name,
+            name: r.name || r.tag_name,
+            body: r.body || '',
+            prerelease: r.prerelease,
+            draft: r.draft,
+            publishedAt: r.published_at,
+            assets: (r.assets || []).map(a => ({
+                name: a.name,
+                size: a.size,
+                url: a.browser_download_url,
+                downloadCount: a.download_count
+            }))
+        }));
+    } catch (e) { return []; }
+});
+
+// Get recent commits (for dev builds)
+ipcMain.handle('app:getCommits', async () => {
+    try {
+        const commits = await githubFetch('/commits?per_page=20');
+        return commits.map(c => ({
+            sha: c.sha,
+            shortSha: c.sha.substring(0, 7),
+            message: c.commit?.message?.split('\n')[0] || '',
+            fullMessage: c.commit?.message || '',
+            author: c.commit?.author?.name || c.author?.login || 'unknown',
+            date: c.commit?.author?.date || '',
+            avatarUrl: c.author?.avatar_url || ''
+        }));
+    } catch (e) { return []; }
+});
+
+// Select a dev build for installation
+ipcMain.handle('app:selectDevBuild', async (_, build) => {
+    // build = { tag, fileName, downloadUrl } or from commit
+    store.set('selectedDevBuild', build);
+    return { success: true };
+});
+
+// Apply mod update (download from release)
+ipcMain.handle('app:applyModUpdate', async (event, assetInfo) => {
+    // assetInfo = { name, url }
+    try {
+        const gameDir = store.get('gameDir') || GAME_DIR;
+        const modsDir = path.join(gameDir, 'mods');
+        if (!fs.existsSync(modsDir)) fs.mkdirSync(modsDir, { recursive: true });
+
+        // Remove old ChaosClient jars
+        const existingMods = fs.readdirSync(modsDir).filter(f => f.startsWith('ChaosClient') && f.endsWith('.jar'));
+        for (const old of existingMods) {
+            fs.unlinkSync(path.join(modsDir, old));
+        }
+
+        const destPath = path.join(modsDir, assetInfo.name);
+        // Use the mcLauncher downloader for retries
+        await mcLauncher._downloadFile(assetInfo.url, destPath);
+        return { success: true, fileName: assetInfo.name };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
 });
 
 ipcMain.handle('app:getNews', async () => {
-    // Попытка загрузить с GitHub
     try {
-        const https = require('https');
-        const data = await new Promise((resolve, reject) => {
-            // Читаем последние 5 коммитов из repo
-            const url = 'https://api.github.com/repos/totalchaos01/ChaosClient-releases/commits?per_page=5';
-            https.get(url, { headers: { 'User-Agent': 'ChaosClient-Launcher/1.0' }, timeout: 5000 }, (res) => {
-                if (res.statusCode !== 200) { resolve(null); return; }
-                let body = '';
-                res.on('data', c => body += c);
-                res.on('end', () => {
-                    try { resolve(JSON.parse(body)); } catch (e) { resolve(null); }
-                });
-            }).on('error', () => resolve(null));
-        });
-
-        if (data && Array.isArray(data)) {
-            return data.map(c => {
+        const commits = await githubFetch('/commits?per_page=5');
+        if (commits && Array.isArray(commits)) {
+            return commits.map(c => {
                 const msg = c.commit?.message || '';
                 const lines = msg.split('\n');
                 const title = lines[0] || 'Обновление';
@@ -206,7 +338,7 @@ ipcMain.handle('app:getNews', async () => {
             });
         }
     } catch (e) { /* fallback to static */ }
-    return null; // Use static news from HTML
+    return null;
 });
 
 // ===== Информация о приложении =====

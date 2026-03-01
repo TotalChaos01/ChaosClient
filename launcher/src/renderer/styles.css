@@ -368,6 +368,98 @@ html, body {
 .about-card:nth-child(3) { animation-delay: 0.3s; }
 .about-card:hover { transform: translateY(-2px); border-color: var(--border-hover); }
 
+/* ===== Билды / Dev Builds ===== */
+.devbuilds-content { display: flex; flex-direction: column; gap: 16px; }
+
+.update-status-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+}
+.update-status-header { display: flex; align-items: center; gap: 16px; }
+.update-status-icon { font-size: 28px; color: var(--accent); }
+.update-status-icon.has-update { color: #22c55e; }
+.update-status-icon.up-to-date { color: var(--text-muted); }
+.update-status-icon.error { color: #ef4444; }
+.update-status-text { flex: 1; }
+.update-status-text h3 { font-size: 15px; font-weight: 600; color: var(--text); margin: 0; }
+.update-status-text p { font-size: 12px; color: var(--text-muted); margin: 4px 0 0; }
+.update-actions { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.update-changelog { font-size: 12px; color: var(--text-muted); margin-top: 10px; white-space: pre-wrap; max-height: 120px; overflow-y: auto; line-height: 1.5; }
+.update-progress { margin-top: 12px; }
+.update-progress-text { font-size: 12px; color: var(--text-muted); margin-top: 4px; display: block; }
+
+.channel-switcher { display: flex; gap: 8px; }
+.channel-btn {
+    flex: 1;
+    padding: 10px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-align: center;
+}
+.channel-btn:hover { border-color: var(--border-hover); color: var(--text); }
+.channel-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.channel-btn i { margin-right: 6px; }
+
+.builds-list {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    max-height: calc(100vh - 380px);
+    overflow-y: auto;
+}
+.builds-loading { padding: 40px; text-align: center; color: var(--text-muted); font-size: 14px; }
+.builds-loading i { margin-right: 8px; }
+
+.build-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+    cursor: default;
+}
+.build-item:last-child { border-bottom: none; }
+.build-item:hover { background: rgba(255,255,255,0.02); }
+.build-item-icon { font-size: 18px; color: var(--accent); flex-shrink: 0; }
+.build-item-icon.prerelease { color: #f59e0b; }
+.build-item-icon.commit { color: var(--text-muted); }
+.build-item-info { flex: 1; min-width: 0; }
+.build-item-title { font-size: 13px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.build-item-meta { font-size: 11px; color: var(--text-muted); margin-top: 3px; display: flex; gap: 12px; }
+.build-item-meta span { display: flex; align-items: center; gap: 4px; }
+.build-item-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.build-item .btn-small-build {
+    padding: 5px 12px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.build-item .btn-small-build:hover { filter: brightness(1.15); }
+.build-item .btn-small-build.active { background: #22c55e; }
+.build-item .btn-small-build:disabled { opacity: 0.5; cursor: not-allowed; }
+.build-tag { padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 600; text-transform: uppercase; }
+.build-tag.release { background: rgba(99,102,241,0.15); color: var(--accent); }
+.build-tag.prerelease { background: rgba(245,158,11,0.15); color: #f59e0b; }
+.build-tag.draft { background: rgba(107,114,128,0.15); color: #6b7280; }
+
+.builds-empty { padding: 40px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.builds-empty i { display: block; font-size: 32px; margin-bottom: 12px; opacity: 0.4; }
+
 /* ===== Адаптив ===== */
 @media (max-width: 900px) {
     .hero-title { font-size: 36px; }

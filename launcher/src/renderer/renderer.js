@@ -206,8 +206,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const result = await launcher.checkUpdate();
             if (result.hasUpdate) {
-                status.textContent = `Доступно обновление: ${result.latestVersion}`;
-                status.style.color = '#22c55e';
+                status.innerHTML = `<span style="color:#22c55e">✅ Доступно обновление: ${escapeHtml(result.latestVersion)}</span>`;
+                if (result.modAsset) {
+                    status.innerHTML += `<br><small style="color:var(--text-muted)">Мод: ${escapeHtml(result.modAsset.name)}</small>`;
+                }
+            } else if (result.error) {
+                status.textContent = `Ошибка: ${result.error}`; status.style.color = '#ef4444';
             } else {
                 status.textContent = 'У вас последняя версия!';
                 status.style.color = '#22c55e';
@@ -438,6 +442,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // ===== Горячие клавиши =====
     document.addEventListener('keydown', (e) => { if (e.key === 'F5') location.reload(); });
 
+    // ===== Страница билдов =====
+    initDevBuildsPage();
+
     // ===== Загрузка новостей с GitHub =====
     loadNews();
 });
@@ -596,4 +603,215 @@ async function loadNews() {
             }
         }
     } catch (e) { /* Используем статические новости */ }
+}
+
+// ===== Dev Builds Page =====
+let lastUpdateResult = null;
+
+async function initDevBuildsPage() {
+    const channelBtns = document.querySelectorAll('.channel-btn');
+    const releasesList = document.getElementById('releases-list');
+    const commitsList = document.getElementById('commits-list');
+
+    // Channel switcher
+    channelBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            channelBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const channel = btn.dataset.channel;
+            releasesList.style.display = channel === 'releases' ? '' : 'none';
+            commitsList.style.display = channel === 'commits' ? '' : 'none';
+            if (channel === 'commits' && commitsList.querySelector('.builds-loading')) loadCommits();
+            if (channel === 'releases' && releasesList.querySelector('.builds-loading')) loadReleases();
+        });
+    });
+
+    // Refresh button
+    document.getElementById('btn-refresh-updates')?.addEventListener('click', async () => {
+        const btn = document.getElementById('btn-refresh-updates');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>'; btn.disabled = true;
+        await checkForUpdates();
+        await loadReleases();
+        btn.innerHTML = '<i class="fas fa-sync"></i> Обновить'; btn.disabled = false;
+    });
+
+    // Apply update button
+    document.getElementById('btn-apply-update')?.addEventListener('click', async () => {
+        if (!lastUpdateResult || !lastUpdateResult.modAsset) return;
+        const btn = document.getElementById('btn-apply-update');
+        const progressEl = document.getElementById('update-apply-progress');
+        const progressText = document.getElementById('update-progress-text');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Установка...';
+        progressEl.style.display = '';
+        progressText.textContent = `Загрузка ${lastUpdateResult.modAsset.name}...`;
+
+        try {
+            const result = await launcher.applyModUpdate(lastUpdateResult.modAsset);
+            if (result.success) {
+                progressText.textContent = `✅ Мод обновлён: ${result.fileName}`;
+                btn.innerHTML = '<i class="fas fa-check"></i> Установлено';
+                document.getElementById('update-title').textContent = 'Обновление установлено!';
+                document.getElementById('update-icon').className = 'update-status-icon up-to-date';
+                document.getElementById('update-icon').innerHTML = '<i class="fas fa-check-circle"></i>';
+            } else {
+                throw new Error(result.error);
+            }
+        } catch (e) {
+            progressText.textContent = `❌ Ошибка: ${e.message}`;
+            btn.innerHTML = '<i class="fas fa-download"></i> Повторить';
+            btn.disabled = false;
+        }
+    });
+
+    // Initial load
+    await checkForUpdates();
+    loadReleases();
+}
+
+async function checkForUpdates() {
+    const titleEl = document.getElementById('update-title');
+    const subtitleEl = document.getElementById('update-subtitle');
+    const iconEl = document.getElementById('update-icon');
+    const actionsEl = document.getElementById('update-actions');
+    const changelogEl = document.getElementById('update-changelog');
+    const applyBtn = document.getElementById('btn-apply-update');
+
+    titleEl.textContent = 'Проверка обновлений...';
+    iconEl.className = 'update-status-icon';
+    iconEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    actionsEl.style.display = 'none';
+    document.getElementById('update-apply-progress').style.display = 'none';
+
+    try {
+        const version = await launcher.getVersion();
+        subtitleEl.textContent = `Текущая версия: ${version}`;
+
+        const result = await launcher.checkUpdate();
+        lastUpdateResult = result;
+
+        if (result.hasUpdate && result.modAsset) {
+            titleEl.textContent = `Доступно обновление: ${result.releaseName || result.latestVersion}`;
+            iconEl.className = 'update-status-icon has-update';
+            iconEl.innerHTML = '<i class="fas fa-arrow-circle-up"></i>';
+            actionsEl.style.display = '';
+            applyBtn.disabled = false;
+            applyBtn.innerHTML = '<i class="fas fa-download"></i> Установить обновление';
+            changelogEl.textContent = result.releaseBody || '';
+        } else if (result.error) {
+            titleEl.textContent = 'Не удалось проверить обновления';
+            iconEl.className = 'update-status-icon error';
+            iconEl.innerHTML = '<i class="fas fa-exclamation-circle"></i>';
+        } else {
+            titleEl.textContent = 'Установлена последняя версия';
+            iconEl.className = 'update-status-icon up-to-date';
+            iconEl.innerHTML = '<i class="fas fa-check-circle"></i>';
+        }
+    } catch (e) {
+        titleEl.textContent = 'Ошибка проверки обновлений';
+        iconEl.className = 'update-status-icon error';
+        iconEl.innerHTML = '<i class="fas fa-exclamation-circle"></i>';
+    }
+}
+
+async function loadReleases() {
+    const listEl = document.getElementById('releases-list');
+    listEl.innerHTML = '<div class="builds-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка релизов...</div>';
+
+    try {
+        const releases = await launcher.getReleases();
+        if (!releases || releases.length === 0) {
+            listEl.innerHTML = '<div class="builds-empty"><i class="fas fa-box-open"></i>Нет доступных релизов</div>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        for (const rel of releases) {
+            const modJar = rel.assets.find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient'));
+            const tagClass = rel.prerelease ? 'prerelease' : rel.draft ? 'draft' : 'release';
+            const tagText = rel.prerelease ? 'Dev' : rel.draft ? 'Черновик' : 'Release';
+            const dateStr = rel.publishedAt ? new Date(rel.publishedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+            const assetCount = rel.assets.length;
+
+            const el = document.createElement('div');
+            el.className = 'build-item';
+            el.innerHTML = `
+                <div class="build-item-icon ${tagClass}"><i class="fas fa-${rel.prerelease ? 'flask' : 'tag'}"></i></div>
+                <div class="build-item-info">
+                    <div class="build-item-title">${escapeHtml(rel.name || rel.tag)}</div>
+                    <div class="build-item-meta">
+                        <span><span class="build-tag ${tagClass}">${tagText}</span></span>
+                        <span><i class="fas fa-calendar"></i> ${escapeHtml(dateStr)}</span>
+                        <span><i class="fas fa-file"></i> ${assetCount} файл(ов)</span>
+                    </div>
+                </div>
+                <div class="build-item-actions">
+                    ${modJar ? `<button class="btn-small-build" data-url="${escapeHtml(modJar.url)}" data-name="${escapeHtml(modJar.name)}" data-tag="${escapeHtml(rel.tag)}"><i class="fas fa-download"></i> Мод</button>` : ''}
+                </div>
+            `;
+
+            // Install button for mod
+            const installBtn = el.querySelector('.btn-small-build');
+            if (installBtn) {
+                installBtn.addEventListener('click', async () => {
+                    installBtn.disabled = true;
+                    installBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+                    try {
+                        const result = await launcher.applyModUpdate({
+                            name: installBtn.dataset.name,
+                            url: installBtn.dataset.url
+                        });
+                        if (result.success) {
+                            installBtn.innerHTML = '<i class="fas fa-check"></i> OK';
+                            installBtn.classList.add('active');
+                        } else {
+                            installBtn.innerHTML = '<i class="fas fa-times"></i>';
+                            installBtn.disabled = false;
+                        }
+                    } catch (e) {
+                        installBtn.innerHTML = '<i class="fas fa-times"></i>';
+                        installBtn.disabled = false;
+                    }
+                });
+            }
+
+            listEl.appendChild(el);
+        }
+    } catch (e) {
+        listEl.innerHTML = `<div class="builds-empty"><i class="fas fa-exclamation-circle"></i>Ошибка загрузки: ${escapeHtml(e.message)}</div>`;
+    }
+}
+
+async function loadCommits() {
+    const listEl = document.getElementById('commits-list');
+    listEl.innerHTML = '<div class="builds-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка коммитов...</div>';
+
+    try {
+        const commits = await launcher.getCommits();
+        if (!commits || commits.length === 0) {
+            listEl.innerHTML = '<div class="builds-empty"><i class="fas fa-code-commit"></i>Нет коммитов</div>';
+            return;
+        }
+
+        listEl.innerHTML = '';
+        for (const c of commits) {
+            const dateStr = c.date ? new Date(c.date).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+            const el = document.createElement('div');
+            el.className = 'build-item';
+            el.innerHTML = `
+                <div class="build-item-icon commit"><i class="fas fa-code-commit"></i></div>
+                <div class="build-item-info">
+                    <div class="build-item-title">${escapeHtml(c.message)}</div>
+                    <div class="build-item-meta">
+                        <span><code style="color:var(--accent);font-size:11px;">${escapeHtml(c.shortSha)}</code></span>
+                        <span><i class="fas fa-user"></i> ${escapeHtml(c.author)}</span>
+                        <span><i class="fas fa-clock"></i> ${escapeHtml(dateStr)}</span>
+                    </div>
+                </div>
+            `;
+            listEl.appendChild(el);
+        }
+    } catch (e) {
+        listEl.innerHTML = `<div class="builds-empty"><i class="fas fa-exclamation-circle"></i>Ошибка: ${escapeHtml(e.message)}</div>`;
+    }
 }

@@ -32,7 +32,10 @@
       }
     ],
     "linux": {
-      "target": ["deb", "AppImage"],
+      "target": [
+        "deb",
+        "AppImage"
+      ],
       "icon": "build/icon.png",
       "category": "Game",
       "maintainer": "totalchaos01",
@@ -60,6 +63,7 @@
   },
   "devDependencies": {
     "electron": "^33.0.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.1"
   }
 }
