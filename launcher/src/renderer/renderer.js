@@ -357,7 +357,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         progressText.textContent = msg || '';
     });
 
-    // Логи — ТОЛЬКО на странице логов
+    // ===== Логи (только на вкладке Логи) =====
     const logEntries = document.getElementById('log-entries');
     const logEmpty = document.getElementById('log-empty');
     const logsContainer = document.getElementById('logs-container');

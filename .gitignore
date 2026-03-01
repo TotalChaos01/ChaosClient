@@ -43,3 +43,10 @@ bin/
 .DS_Store
 
 /rise-main
+### Launcher ###
+launcher/node_modules/
+launcher/dist/
+launcher/package-lock.json
+
+### Rise source (external) ###
+rise-main/

@@ -211,31 +211,34 @@ class MinecraftLauncher extends EventEmitter {
 
     async _downloadLibraries(versionData) {
         const libsDir = path.join(this.gameDir, 'libraries');
-        const libraries = versionData.libraries || [];
-        let downloaded = 0;
+        const libraries = (versionData.libraries || []).filter(lib => {
+            if (!this._isLibraryAllowed(lib)) return false;
+            return !!lib.downloads?.artifact;
+        });
+        let completed = 0;
+        const total = libraries.length;
+        const batchSize = 10;
 
-        for (const lib of libraries) {
-            if (!this._isLibraryAllowed(lib)) continue;
-
-            const artifact = lib.downloads?.artifact;
-            if (!artifact) continue;
-
-            const libPath = path.join(libsDir, artifact.path);
-            if (fs.existsSync(libPath)) { downloaded++; continue; }
-
-            try {
-                mkdirSync(path.dirname(libPath), { recursive: true });
-                await this._downloadFile(artifact.url, libPath);
-                downloaded++;
-            } catch (e) {
-                this._log('warn', `Не удалось скачать библиотеку: ${lib.name}: ${e.message}`);
-            }
-
-            const progress = 10 + Math.round((downloaded / libraries.length) * 25);
+        for (let i = 0; i < total; i += batchSize) {
+            const batch = libraries.slice(i, i + batchSize);
+            await Promise.all(batch.map(async (lib) => {
+                const artifact = lib.downloads.artifact;
+                const libPath = path.join(libsDir, artifact.path);
+                if (fs.existsSync(libPath)) { completed++; return; }
+                try {
+                    mkdirSync(path.dirname(libPath), { recursive: true });
+                    await this._downloadFile(artifact.url, libPath);
+                    completed++;
+                } catch (e) {
+                    this._log('warn', `Библиотека: ${lib.name}: ${e.message}`);
+                    completed++;
+                }
+            }));
+            const progress = 10 + Math.round((completed / total) * 25);
             this.emit('progress', { percent: Math.min(progress, 35), stage: 'libraries' });
         }
 
-        this._log('info', `Загружено библиотек: ${downloaded}`);
+        this._log('info', `Загружено библиотек: ${completed}`);
     }
 
     _isLibraryAllowed(lib) {
@@ -273,7 +276,7 @@ class MinecraftLauncher extends EventEmitter {
         const entries = Object.entries(objects);
         let downloaded = 0;
         let skipped = 0;
-        const batchSize = 30;
+        const batchSize = 50;
 
         for (let i = 0; i < entries.length; i += batchSize) {
             const batch = entries.slice(i, i + batchSize);
@@ -331,24 +334,24 @@ class MinecraftLauncher extends EventEmitter {
         fs.writeFileSync(fabricJson, JSON.stringify(profile, null, 2));
         this._log('info', 'Профиль Fabric установлен');
 
-        // Download Fabric libraries
+        // Download Fabric libraries in parallel
         const libsDir = path.join(this.gameDir, 'libraries');
-        for (const lib of (profile.libraries || [])) {
-            const nameParts = lib.name.split(':');
-            const [group, artifact, version] = nameParts;
+        const fabricLibs = (profile.libraries || []).map(lib => {
+            const [group, artifact, version] = lib.name.split(':');
             const groupPath = group.replace(/\./g, '/');
             const relPath = `${groupPath}/${artifact}/${version}/${artifact}-${version}.jar`;
-            const libPath = path.join(libsDir, relPath);
+            return { name: lib.name, url: (lib.url || 'https://maven.fabricmc.net/') + relPath, path: path.join(libsDir, relPath) };
+        }).filter(l => !fs.existsSync(l.path));
 
-            if (fs.existsSync(libPath)) continue;
-
-            const url = (lib.url || 'https://maven.fabricmc.net/') + relPath;
-            try {
-                mkdirSync(path.dirname(libPath), { recursive: true });
-                await this._downloadFile(url, libPath);
-            } catch (e) {
-                this._log('warn', `Не удалось скачать Fabric библиотеку: ${lib.name}`);
-            }
+        if (fabricLibs.length > 0) {
+            await Promise.all(fabricLibs.map(async (lib) => {
+                try {
+                    mkdirSync(path.dirname(lib.path), { recursive: true });
+                    await this._downloadFile(lib.url, lib.path);
+                } catch (e) {
+                    this._log('warn', `Fabric библиотека: ${lib.name}: ${e.message}`);
+                }
+            }));
         }
 
         this._log('info', 'Fabric библиотеки установлены');
@@ -380,9 +383,8 @@ class MinecraftLauncher extends EventEmitter {
     async _installClientMod(modsDir) {
         const modFileName = 'ChaosClient-1.0.0.jar';
         const destPath = path.join(modsDir, modFileName);
-        if (fs.existsSync(destPath)) return;
 
-        // Check bundled resource first
+        // Check bundled resource first — always overwrite to ensure latest version
         const bundledPaths = [
             path.join(process.resourcesPath || '', modFileName),
             path.join(__dirname, '..', '..', '..', 'build', 'libs', modFileName),
@@ -391,8 +393,15 @@ class MinecraftLauncher extends EventEmitter {
 
         for (const srcPath of bundledPaths) {
             if (fs.existsSync(srcPath)) {
-                fs.copyFileSync(srcPath, destPath);
-                this._log('info', 'ChaosClient мод установлен (из ресурсов)');
+                const srcSize = fs.statSync(srcPath).size;
+                const destSize = fs.existsSync(destPath) ? fs.statSync(destPath).size : 0;
+                if (srcSize !== destSize) {
+                    fs.copyFileSync(srcPath, destPath);
+                    this._log('info', 'ChaosClient мод обновлён (из ресурсов)');
+                } else if (!fs.existsSync(destPath)) {
+                    fs.copyFileSync(srcPath, destPath);
+                    this._log('info', 'ChaosClient мод установлен (из ресурсов)');
+                }
                 return;
             }
         }
@@ -747,42 +756,29 @@ class MinecraftLauncher extends EventEmitter {
 
     // ===== Network utilities =====
 
-    _fetchJson(url) {
-        return new Promise((resolve, reject) => {
-            const doRequest = (url, redirects = 0) => {
-                if (redirects > 5) { reject(new Error('Слишком много перенаправлений')); return; }
-                const mod = url.startsWith('https') ? https : http;
-                mod.get(url, {
-                    headers: { 'User-Agent': 'ChaosClient-Launcher/1.0', 'Accept': 'application/json' },
-                    timeout: 15000
-                }, (res) => {
-                    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                        doRequest(res.headers.location, redirects + 1);
-                        return;
-                    }
-                    if (res.statusCode !== 200) {
-                        reject(new Error(`HTTP ${res.statusCode} для ${url}`));
-                        return;
-                    }
-                    let data = '';
-                    res.on('data', (chunk) => data += chunk);
-                    res.on('end', () => {
-                        try { resolve(JSON.parse(data)); }
-                        catch (e) { reject(new Error(`JSON parse error: ${e.message}`)); }
-                    });
-                }).on('error', reject).on('timeout', () => reject(new Error('Таймаут загрузки')));
-            };
-            doRequest(url);
-        });
+    async _fetchJson(url, retries = 3) {
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                return await this._fetchJsonOnce(url);
+            } catch (e) {
+                if (attempt < retries) {
+                    await new Promise(r => setTimeout(r, 1000 * attempt));
+                    continue;
+                }
+                throw e;
+            }
+        }
     }
 
-    _downloadFile(url, destPath, expectedSize) {
+    _fetchJsonOnce(url) {
         return new Promise((resolve, reject) => {
-            const doRequest = (url, redirects = 0) => {
-                if (redirects > 5) { reject(new Error('Слишком много перенаправлений')); return; }
-                const mod = url.startsWith('https') ? https : http;
-                mod.get(url, {
-                    headers: { 'User-Agent': 'ChaosClient-Launcher/1.0' },
+            let settled = false;
+            const settle = (fn, val) => { if (!settled) { settled = true; fn(val); } };
+            const doRequest = (reqUrl, redirects = 0) => {
+                if (redirects > 5) { settle(reject, new Error('Слишком много перенаправлений')); return; }
+                const mod = reqUrl.startsWith('https') ? https : http;
+                const req = mod.get(reqUrl, {
+                    headers: { 'User-Agent': 'ChaosClient-Launcher/1.0', 'Accept': 'application/json' },
                     timeout: 30000
                 }, (res) => {
                     if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -790,22 +786,74 @@ class MinecraftLauncher extends EventEmitter {
                         return;
                     }
                     if (res.statusCode !== 200) {
-                        reject(new Error(`HTTP ${res.statusCode}`));
+                        settle(reject, new Error(`HTTP ${res.statusCode}`));
+                        return;
+                    }
+                    let data = '';
+                    res.on('data', (chunk) => data += chunk);
+                    res.on('end', () => {
+                        try { settle(resolve, JSON.parse(data)); }
+                        catch (e) { settle(reject, new Error(`JSON parse error: ${e.message}`)); }
+                    });
+                    res.on('error', (e) => settle(reject, e));
+                });
+                req.on('error', (e) => settle(reject, e));
+                req.on('timeout', () => { req.destroy(); settle(reject, new Error('Таймаут загрузки')); });
+            };
+            doRequest(url);
+        });
+    }
+
+    async _downloadFile(url, destPath, retries = 3) {
+        for (let attempt = 1; attempt <= retries; attempt++) {
+            try {
+                return await this._downloadFileOnce(url, destPath);
+            } catch (e) {
+                try { fs.unlinkSync(destPath); } catch (_) { /* ignore */ }
+                if (attempt < retries) {
+                    await new Promise(r => setTimeout(r, 800 * attempt));
+                    continue;
+                }
+                throw e;
+            }
+        }
+    }
+
+    _downloadFileOnce(url, destPath) {
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            const settle = (fn, val) => { if (!settled) { settled = true; fn(val); } };
+            const doRequest = (reqUrl, redirects = 0) => {
+                if (redirects > 5) { settle(reject, new Error('Слишком много перенаправлений')); return; }
+                const mod = reqUrl.startsWith('https') ? https : http;
+                const req = mod.get(reqUrl, {
+                    headers: { 'User-Agent': 'ChaosClient-Launcher/1.0' },
+                    timeout: 60000
+                }, (res) => {
+                    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                        doRequest(res.headers.location, redirects + 1);
+                        return;
+                    }
+                    if (res.statusCode !== 200) {
+                        settle(reject, new Error(`HTTP ${res.statusCode}`));
                         return;
                     }
                     mkdirSync(path.dirname(destPath), { recursive: true });
                     const file = createWriteStream(destPath);
                     res.pipe(file);
-                    file.on('finish', () => { file.close(); resolve(); });
+                    file.on('finish', () => { file.close(); settle(resolve); });
                     file.on('error', (err) => {
                         file.close();
                         try { fs.unlinkSync(destPath); } catch (e) { /* ignore */ }
-                        reject(err);
+                        settle(reject, err);
                     });
-                }).on('error', (err) => {
+                    res.on('error', (e) => settle(reject, e));
+                });
+                req.on('error', (err) => {
                     try { fs.unlinkSync(destPath); } catch (e) { /* ignore */ }
-                    reject(err);
-                }).on('timeout', () => reject(new Error('Таймаут загрузки')));
+                    settle(reject, err);
+                });
+                req.on('timeout', () => { req.destroy(); settle(reject, new Error('Таймаут загрузки')); });
             };
             doRequest(url);
         });
