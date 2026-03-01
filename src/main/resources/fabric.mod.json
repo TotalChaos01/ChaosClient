@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "chaosclient",
+  "version": "${version}",
+  "name": "ChaosClient",
+  "description": "ChaosClient — Fabric клиент для Minecraft",
+  "authors": ["totalchaos01"],
+  "contact": {},
+  "license": "All-Rights-Reserved",
+  "icon": "assets/chaosclient/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "me.totalchaos01.chaosclient.ChaosClient"
+    ]
+  },
+  "mixins": [
+    "chaosclient.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
+

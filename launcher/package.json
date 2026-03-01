@@ -1,0 +1,65 @@
+{
+  "name": "chaosclient-launcher",
+  "version": "1.0.0",
+  "description": "ChaosClient Launcher — Universal Minecraft Client Launcher",
+  "author": "totalchaos01",
+  "homepage": "https://github.com/totalchaos01/ChaosClient",
+  "license": "MIT",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron --no-sandbox .",
+    "dev": "electron --no-sandbox . --dev",
+    "build:linux": "electron-builder --linux deb AppImage",
+    "build:win": "electron-builder --win nsis",
+    "build:all": "electron-builder --linux deb AppImage --win nsis",
+    "pack": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.chaosclient.launcher",
+    "productName": "ChaosClient Launcher",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../build/libs/ChaosClient-1.0.0.jar",
+        "to": "ChaosClient-1.0.0.jar"
+      }
+    ],
+    "linux": {
+      "target": ["deb", "AppImage"],
+      "icon": "build/icon.png",
+      "category": "Game",
+      "maintainer": "totalchaos01",
+      "synopsis": "ChaosClient — Universal Minecraft Client"
+    },
+    "deb": {
+      "packageCategory": "game"
+    },
+    "appImage": {
+      "license": "LICENSE"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}
