@@ -10,8 +10,8 @@
     "start": "electron --no-sandbox .",
     "dev": "electron --no-sandbox . --dev",
     "build:linux": "electron-builder --linux deb AppImage",
-    "build:win": "electron-builder --win nsis",
-    "build:all": "electron-builder --linux deb AppImage --win nsis",
+    "build:win": "electron-builder --win portable",
+    "build:all": "electron-builder --linux deb AppImage --win portable",
     "pack": "electron-builder --dir"
   },
   "build": {
@@ -48,14 +48,11 @@
       "license": "LICENSE"
     },
     "win": {
-      "target": "nsis",
+      "target": "portable",
       "icon": "build/icon.ico"
     },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
+    "portable": {
+      "artifactName": "ChaosClient-${version}-Portable.${ext}"
     }
   },
   "dependencies": {

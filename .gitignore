@@ -50,3 +50,20 @@ launcher/package-lock.json
 
 ### Rise source (external) ###
 rise-main/
+
+need decompile
+
+### Bundle upload scripts (contain tokens) ###
+upload-bundle*.sh
+
+### Decompiler jars ###
+cfr.jar
+vineflower.jar
+
+### Extracted AppImage ###
+launcher/squashfs-root/
+
+### Patch scripts (dev-only) ###
+launcher/patch_clickgui.py
+launcher/patch_html.py
+chaosclient-bundle-*.zip

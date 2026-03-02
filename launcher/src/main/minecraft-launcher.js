@@ -7,12 +7,34 @@ const { spawn, execSync } = require('child_process');
 const { createWriteStream, mkdirSync } = require('fs');
 const crypto = require('crypto');
 
+// ── Persistent HTTP agents with connection pooling ──
+// Reuses TCP+TLS connections → eliminates ~200ms handshake per request
+const httpsAgent = new https.Agent({
+    keepAlive: true,
+    keepAliveMsecs: 15000,
+    maxSockets: 32,         // max parallel connections per host
+    maxTotalSockets: 64,    // max total across all hosts
+    timeout: 30000,
+});
+const httpAgent = new http.Agent({
+    keepAlive: true,
+    keepAliveMsecs: 15000,
+    maxSockets: 32,
+    maxTotalSockets: 64,
+    timeout: 30000,
+});
+
 const MINECRAFT_VERSION = '1.21.11';
 const FABRIC_LOADER_VERSION = '0.18.4';
 const FABRIC_API_VERSION = '0.141.3+1.21.11';
 const VERSION_MANIFEST_URL = 'https://piston-meta.mojang.com/mc/game/version_manifest_v2.json';
 const FABRIC_META_URL = 'https://meta.fabricmc.net';
 const MODRINTH_API = 'https://api.modrinth.com/v2';
+
+// ── Pre-built bundle: 1 ZIP instead of ~1000 individual downloads ──
+const BUNDLE_TAG = `bundle-${MINECRAFT_VERSION}`;
+const BUNDLE_FILENAME = `chaosclient-bundle-${MINECRAFT_VERSION}.zip`;
+const BUNDLE_URL = `https://github.com/TotalChaos01/ChaosClient/releases/download/${BUNDLE_TAG}/${BUNDLE_FILENAME}`;
 
 // Modrinth project IDs для модов
 const MODRINTH_MODS = {
@@ -58,24 +80,39 @@ class MinecraftLauncher extends EventEmitter {
             try {
                 // Memory from /proc/PID/statm (pages)
                 const statm = fs.readFileSync(`/proc/${pid}/statm`, 'utf8').trim().split(' ');
-                const pageSize = 4096; // typical page size
+                const pageSize = 4096;
                 const rssPages = parseInt(statm[1]) || 0;
                 stats.memoryMB = Math.round((rssPages * pageSize) / (1024 * 1024));
+            } catch (e) {
+                // Fallback: ps command for memory
+                try {
+                    const out = execSync(`ps -o rss= -p ${pid}`, { encoding: 'utf8', timeout: 3000 });
+                    const kb = parseInt(out.trim());
+                    if (kb) stats.memoryMB = Math.round(kb / 1024);
+                } catch (e2) { /* ignore */ }
+            }
 
-                // CPU from /proc/PID/stat
-                const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8').trim();
-                // Find the closing paren of comm field, then parse remaining
-                const afterComm = stat.substring(stat.lastIndexOf(')') + 2);
-                const fields = afterComm.split(' ');
-                const utime = parseInt(fields[11]) || 0;
-                const stime = parseInt(fields[12]) || 0;
-                const starttime = parseInt(fields[19]) || 0;
-                const clkTck = 100; // sysconf(_SC_CLK_TCK) typically 100
-                const uptime = parseFloat(fs.readFileSync('/proc/uptime', 'utf8').split(' ')[0]);
-                const totalTime = (utime + stime) / clkTck;
-                const elapsed = uptime - (starttime / clkTck);
-                if (elapsed > 0) stats.cpu = Math.min(Math.round((totalTime / elapsed) * 100), 100);
-            } catch (e) { /* ignore proc read errors */ }
+            try {
+                // CPU via ps -o %cpu for simplicity and reliability
+                const cpuOut = execSync(`ps -o %cpu= -p ${pid}`, { encoding: 'utf8', timeout: 3000 });
+                const cpuVal = parseFloat(cpuOut.trim());
+                if (!isNaN(cpuVal)) stats.cpu = Math.round(cpuVal);
+            } catch (e) {
+                // Fallback: /proc/PID/stat calculation
+                try {
+                    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8').trim();
+                    const afterComm = stat.substring(stat.lastIndexOf(')') + 2);
+                    const fields = afterComm.split(' ');
+                    const utime = parseInt(fields[11]) || 0;
+                    const stime = parseInt(fields[12]) || 0;
+                    const starttime = parseInt(fields[19]) || 0;
+                    const clkTck = 100;
+                    const uptime = parseFloat(fs.readFileSync('/proc/uptime', 'utf8').split(' ')[0]);
+                    const totalTime = (utime + stime) / clkTck;
+                    const elapsed = uptime - (starttime / clkTck);
+                    if (elapsed > 0) stats.cpu = Math.min(Math.round((totalTime / elapsed) * 100), 100);
+                } catch (e2) { /* ignore */ }
+            }
         } else if (process.platform === 'win32') {
             try {
                 const out = execSync(`wmic process where ProcessId=${pid} get WorkingSetSize /format:value`, { encoding: 'utf8', timeout: 3000 });
@@ -84,9 +121,12 @@ class MinecraftLauncher extends EventEmitter {
             } catch (e) { /* ignore */ }
         } else if (process.platform === 'darwin') {
             try {
-                const out = execSync(`ps -o rss= -p ${pid}`, { encoding: 'utf8', timeout: 3000 });
-                const kb = parseInt(out.trim());
+                const out = execSync(`ps -o rss=,%cpu= -p ${pid}`, { encoding: 'utf8', timeout: 3000 });
+                const parts = out.trim().split(/\s+/);
+                const kb = parseInt(parts[0]);
                 if (kb) stats.memoryMB = Math.round(kb / 1024);
+                const cpu = parseFloat(parts[1]);
+                if (!isNaN(cpu)) stats.cpu = Math.round(cpu);
             } catch (e) { /* ignore */ }
         }
 
@@ -125,40 +165,218 @@ class MinecraftLauncher extends EventEmitter {
         const versionData = await this._downloadVersionData();
         this.emit('progress', { percent: 10, stage: 'metadata' });
 
-        // Step 3: Download libraries
-        this.emit('status', 'Загрузка библиотек...');
+        // Step 3: Try bundle (1 ZIP with everything) — FAST PATH
+        if (!this._isBundleInstalled()) {
+            try {
+                this.emit('status', 'Загрузка игровых файлов (бандл)...');
+                await this._downloadAndExtractBundle();
+                this.emit('progress', { percent: 60, stage: 'bundle' });
+            } catch (e) {
+                this._log('warn', `Бандл недоступен (${e.message}), загрузка по отдельности...`);
+                // Fallback: download everything individually
+                this.emit('status', 'Загрузка библиотек...');
+                await this._downloadLibraries(versionData);
+                this.emit('progress', { percent: 35, stage: 'libraries' });
+
+                this.emit('status', 'Загрузка ресурсов...');
+                await this._downloadAssets(versionData);
+                this.emit('progress', { percent: 55, stage: 'assets' });
+
+                this.emit('status', 'Загрузка клиента...');
+                await this._downloadClientJar(versionData);
+                this.emit('progress', { percent: 60, stage: 'client' });
+
+                this.emit('status', 'Установка Fabric...');
+                await this._installFabric();
+                this.emit('progress', { percent: 65, stage: 'fabric' });
+            }
+        } else {
+            this._log('info', 'Бандл уже установлен, пропуск загрузки');
+            this.emit('progress', { percent: 60, stage: 'bundle-cached' });
+        }
+
+        // Step 3.5: Verify all platform libraries exist (safety net after bundle)
+        // The bundle may not include every library; _downloadLibraries skips existing files
+        this.emit('status', 'Проверка библиотек...');
         await this._downloadLibraries(versionData);
-        this.emit('progress', { percent: 35, stage: 'libraries' });
+        this.emit('progress', { percent: 65, stage: 'libraries-verified' });
 
-        // Step 4: Download assets
-        this.emit('status', 'Загрузка ресурсов...');
-        await this._downloadAssets(versionData);
-        this.emit('progress', { percent: 55, stage: 'assets' });
-
-        // Step 5: Download client jar
-        this.emit('status', 'Загрузка клиента...');
-        await this._downloadClientJar(versionData);
-        this.emit('progress', { percent: 60, stage: 'client' });
-
-        // Step 6: Install Fabric
-        this.emit('status', 'Установка Fabric...');
+        // Step 4: Ensure Fabric is installed (may already be from bundle)
+        this.emit('status', 'Проверка Fabric...');
         await this._installFabric();
         this.emit('progress', { percent: 70, stage: 'fabric' });
 
-        // Step 7: Install mods
+        // Step 5: Install mods
         this.emit('status', 'Установка модов...');
         await this._installAllMods();
         this.emit('progress', { percent: 85, stage: 'mods' });
 
-        // Step 8: Apply default game settings
+        // Step 6: Apply default game settings
         this._applyDefaultGameSettings();
 
-        // Step 9: Launch
+        // Step 7: Launch
         this.emit('status', 'Запуск ChaosClient...');
         this.emit('progress', { percent: 90, stage: 'launching' });
         await this._launchGame(javaPath, versionData);
         this.emit('progress', { percent: 100, stage: 'done' });
         this.emit('status', 'ChaosClient запущен!');
+    }
+
+    /**
+     * Check if the bundle has already been extracted (libraries + assets + client jar exist).
+     */
+    _isBundleInstalled() {
+        const clientJar = path.join(this.gameDir, 'versions', MINECRAFT_VERSION, `${MINECRAFT_VERSION}.jar`);
+        const libsDir = path.join(this.gameDir, 'libraries');
+        const assetsDir = path.join(this.gameDir, 'assets', 'objects');
+        const fabricDir = path.join(this.gameDir, 'versions', `fabric-loader-${FABRIC_LOADER_VERSION}-${MINECRAFT_VERSION}`);
+
+        if (!fs.existsSync(clientJar)) return false;
+        if (!fs.existsSync(fabricDir)) return false;
+
+        // Check that at least some libraries exist
+        try {
+            const libCount = this._countFiles(libsDir, '.jar');
+            if (libCount < 50) return false; // should be ~69
+        } catch (e) { return false; }
+
+        // Check that at least some assets exist
+        try {
+            if (!fs.existsSync(assetsDir)) return false;
+            const assetCount = this._countFilesRecursive(assetsDir);
+            if (assetCount < 500) return false; // should be ~957
+        } catch (e) { return false; }
+
+        return true;
+    }
+
+    _countFiles(dir, ext) {
+        if (!fs.existsSync(dir)) return 0;
+        let count = 0;
+        const walk = (d) => {
+            for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+                if (entry.isDirectory()) walk(path.join(d, entry.name));
+                else if (!ext || entry.name.endsWith(ext)) count++;
+            }
+        };
+        walk(dir);
+        return count;
+    }
+
+    _countFilesRecursive(dir) {
+        return this._countFiles(dir, null);
+    }
+
+    /**
+     * Download the pre-built bundle ZIP from GitHub and extract it.
+     * This replaces ~1000 individual HTTP requests with 1 download + unzip.
+     */
+    async _downloadAndExtractBundle() {
+        const bundlePath = path.join(this.gameDir, BUNDLE_FILENAME);
+        mkdirSync(this.gameDir, { recursive: true });
+
+        // Download the ZIP
+        this._log('info', `Загрузка бандла: ${BUNDLE_URL}`);
+        this.emit('status', 'Загрузка игровых файлов (~437 МБ)...');
+
+        await this._downloadFileWithProgress(BUNDLE_URL, bundlePath, (percent) => {
+            this.emit('progress', { percent: 10 + Math.round(percent * 0.45), stage: 'bundle-download' });
+            if (percent % 10 === 0) {
+                this.emit('status', `Загрузка бандла... ${percent}%`);
+            }
+        });
+
+        // Verify the file exists and has reasonable size
+        const stat = fs.statSync(bundlePath);
+        if (stat.size < 200 * 1024 * 1024) {
+            fs.unlinkSync(bundlePath);
+            throw new Error(`Бандл слишком маленький (${this._formatBytes(stat.size)}), возможно повреждён`);
+        }
+
+        this._log('info', `Бандл загружен: ${this._formatBytes(stat.size)}`);
+        this.emit('status', 'Распаковка игровых файлов...');
+        this.emit('progress', { percent: 58, stage: 'bundle-extract' });
+
+        // Extract ZIP
+        try {
+            if (process.platform === 'win32') {
+                execSync(`powershell -command "Expand-Archive -Path '${bundlePath}' -DestinationPath '${this.gameDir}' -Force"`, { timeout: 120000 });
+            } else {
+                execSync(`unzip -o -q "${bundlePath}" -d "${this.gameDir}"`, { timeout: 120000 });
+            }
+        } catch (e) {
+            // Try node-based extraction as fallback
+            this._log('warn', `unzip failed (${e.message}), trying manual extraction...`);
+            throw new Error(`Не удалось распаковать бандл: ${e.message}`);
+        }
+
+        // Clean up ZIP to save disk space
+        try { fs.unlinkSync(bundlePath); } catch (e) { /* ignore */ }
+
+        this._log('info', 'Бандл успешно распакован');
+        this.emit('progress', { percent: 65, stage: 'bundle-done' });
+    }
+
+    /**
+     * Download a file with progress callback (percent 0-100).
+     */
+    _downloadFileWithProgress(url, destPath, onProgress) {
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            const settle = (fn, val) => { if (!settled) { settled = true; fn(val); } };
+            const doRequest = (reqUrl, redirects = 0) => {
+                if (redirects > 10) { settle(reject, new Error('Too many redirects')); return; }
+                const mod = reqUrl.startsWith('https') ? https : http;
+                const req = mod.get(reqUrl, {
+                    agent: this._getAgent(reqUrl),
+                    headers: { 'User-Agent': 'ChaosClient-Launcher/1.0', 'Connection': 'keep-alive' },
+                    timeout: 300000 // 5 min for large bundle
+                }, (res) => {
+                    if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                        let loc = res.headers.location;
+                        if (loc.startsWith('/')) { const u = new URL(reqUrl); loc = u.origin + loc; }
+                        res.resume();
+                        doRequest(loc, redirects + 1);
+                        return;
+                    }
+                    if (res.statusCode !== 200) {
+                        res.resume();
+                        settle(reject, new Error(`HTTP ${res.statusCode}`));
+                        return;
+                    }
+
+                    const totalSize = parseInt(res.headers['content-length'] || '0', 10);
+                    let downloaded = 0;
+                    let lastPercent = -1;
+
+                    mkdirSync(path.dirname(destPath), { recursive: true });
+                    const file = createWriteStream(destPath);
+
+                    res.on('data', (chunk) => {
+                        downloaded += chunk.length;
+                        if (totalSize > 0 && onProgress) {
+                            const percent = Math.round((downloaded / totalSize) * 100);
+                            if (percent !== lastPercent) {
+                                lastPercent = percent;
+                                onProgress(percent);
+                            }
+                        }
+                    });
+
+                    res.pipe(file);
+                    file.on('finish', () => { file.close(); settle(resolve); });
+                    file.on('error', (err) => {
+                        file.close();
+                        try { fs.unlinkSync(destPath); } catch (e) { /* ignore */ }
+                        settle(reject, err);
+                    });
+                    res.on('error', (e) => { file.close(); settle(reject, e); });
+                });
+                req.on('error', (err) => settle(reject, err));
+                req.on('timeout', () => { req.destroy(); settle(reject, new Error('Timeout')); });
+            };
+            doRequest(url);
+        });
     }
 
     async _resolveJavaPath() {
@@ -216,29 +434,93 @@ class MinecraftLauncher extends EventEmitter {
             return !!lib.downloads?.artifact;
         });
         let completed = 0;
+        let failed = 0;
         const total = libraries.length;
-        const batchSize = 10;
+        const batchSize = 15; // keep-alive позволяет больше параллельных загрузок
+        const failedLibs = [];
+
+        // Fallback Maven-репозитории
+        const MAVEN_FALLBACKS = [
+            'https://libraries.minecraft.net/',
+            'https://repo1.maven.org/maven2/',
+            'https://maven.neoforged.net/releases/',
+            'https://maven.fabricmc.net/',
+            'https://maven.google.com/',
+            'https://repo.maven.apache.org/maven2/',
+        ];
 
         for (let i = 0; i < total; i += batchSize) {
             const batch = libraries.slice(i, i + batchSize);
             await Promise.all(batch.map(async (lib) => {
                 const artifact = lib.downloads.artifact;
                 const libPath = path.join(libsDir, artifact.path);
-                if (fs.existsSync(libPath)) { completed++; return; }
+                if (fs.existsSync(libPath) && fs.statSync(libPath).size > 0) { completed++; return; }
+                mkdirSync(path.dirname(libPath), { recursive: true });
+
+                // Попытка 1: основной URL из манифеста
                 try {
-                    mkdirSync(path.dirname(libPath), { recursive: true });
                     await this._downloadFile(artifact.url, libPath);
                     completed++;
-                } catch (e) {
-                    this._log('warn', `Библиотека: ${lib.name}: ${e.message}`);
+                    return;
+                } catch (e) { /* fallback */ }
+
+                // Попытка 2: гонка fallback'ов — кто первый ответит, тот и победил
+                try {
+                    await this._downloadWithFallbackRace(artifact.path, libPath, MAVEN_FALLBACKS);
+                    this._log('info', `Библиотека ${lib.name}: скачана из fallback`);
                     completed++;
-                }
+                    return;
+                } catch (e) { /* все провалились */ }
+
+                this._log('error', `Библиотека НЕ скачана: ${lib.name}`);
+                failedLibs.push({ name: lib.name, artifact });
+                failed++;
+                completed++;
             }));
+
             const progress = 10 + Math.round((completed / total) * 25);
             this.emit('progress', { percent: Math.min(progress, 35), stage: 'libraries' });
         }
 
-        this._log('info', `Загружено библиотек: ${completed}`);
+        // ── Повторная попытка для неудавшихся ──
+        if (failedLibs.length > 0) {
+            this._log('info', `Повторная попытка для ${failedLibs.length} библиотек...`);
+            this.emit('status', `Повтор загрузки ${failedLibs.length} библиотек...`);
+
+            const stillFailed = [];
+            // Повтор батчами по 5 параллельно
+            for (let i = 0; i < failedLibs.length; i += 5) {
+                const retryBatch = failedLibs.slice(i, i + 5);
+                await Promise.all(retryBatch.map(async ({ name, artifact }) => {
+                    const libPath = path.join(libsDir, artifact.path);
+                    if (fs.existsSync(libPath) && fs.statSync(libPath).size > 0) return;
+
+                    // Собираем все URL для гонки
+                    const allUrls = [artifact.url, ...MAVEN_FALLBACKS.map(b => b + artifact.path)];
+                    try {
+                        await this._downloadFirstAvailable(allUrls, libPath);
+                        this._log('info', `Библиотека ${name}: скачана при повторе`);
+                        failed--;
+                    } catch (e) {
+                        stillFailed.push(name);
+                    }
+                }));
+            }
+
+            if (stillFailed.length > 0) {
+                this._log('error', `Не удалось загрузить ${stillFailed.length} библиотек: ${stillFailed.join(', ')}`);
+                const critical = stillFailed.filter(n =>
+                    n.includes('guava') || n.includes('gson') || n.includes('netty') ||
+                    n.includes('lwjgl') || n.includes('log4j') || n.includes('jna') ||
+                    n.includes('commons-codec') || n.includes('commons-io')
+                );
+                if (critical.length > 0) {
+                    throw new Error(`Критические библиотеки не загружены: ${critical.join(', ')}. Проверьте интернет-соединение.`);
+                }
+            }
+        }
+
+        this._log('info', `Загружено библиотек: ${completed - failed}, пропущено: ${failed}`);
     }
 
     _isLibraryAllowed(lib) {
@@ -276,32 +558,69 @@ class MinecraftLauncher extends EventEmitter {
         const entries = Object.entries(objects);
         let downloaded = 0;
         let skipped = 0;
-        const batchSize = 50;
+        let failed = 0;
+        const totalEntries = entries.length;
 
-        for (let i = 0; i < entries.length; i += batchSize) {
-            const batch = entries.slice(i, i + batchSize);
-            const promises = batch.map(async ([name, obj]) => {
+        // Считаем сколько нужно скачать
+        const toDownload = entries.filter(([, obj]) => {
+            const prefix = obj.hash.substring(0, 2);
+            const objPath = path.join(this.gameDir, 'assets', 'objects', prefix, obj.hash);
+            return !fs.existsSync(objPath) || fs.statSync(objPath).size === 0;
+        });
+        const needDownload = toDownload.length;
+
+        if (needDownload > 0) {
+            this._log('info', `Ресурсы: нужно загрузить ${needDownload} из ${totalEntries}`);
+        } else {
+            this._log('info', `Ресурсы: все ${totalEntries} уже загружены`);
+            return;
+        }
+
+        // Скачиваем батчами по 80 — keep-alive переиспользует соединения
+        const assetBatchSize = 80;
+        const failedAssets = [];
+        for (let i = 0; i < needDownload; i += assetBatchSize) {
+            const batch = toDownload.slice(i, i + assetBatchSize);
+            await Promise.all(batch.map(async ([name, obj]) => {
                 const hash = obj.hash;
                 const prefix = hash.substring(0, 2);
                 const objectPath = path.join(this.gameDir, 'assets', 'objects', prefix, hash);
-
-                if (fs.existsSync(objectPath)) { skipped++; return; }
 
                 try {
                     mkdirSync(path.dirname(objectPath), { recursive: true });
                     await this._downloadFile(`https://resources.download.minecraft.net/${prefix}/${hash}`, objectPath);
                     downloaded++;
                 } catch (e) {
-                    // Non-critical - try again later
+                    failedAssets.push([name, obj]);
                 }
-            });
-
-            await Promise.all(promises);
-            const progress = 35 + Math.round(((i + batch.length) / entries.length) * 20);
+            }));
+            const progress = 35 + Math.round(((i + batch.length) / needDownload) * 20);
             this.emit('progress', { percent: Math.min(progress, 55), stage: 'assets' });
+            this.emit('status', `Загрузка ресурсов... ${downloaded}/${needDownload}`);
         }
 
-        this._log('info', `Ресурсы: загружено ${downloaded}, кешировано ${skipped}`);
+        // Повторная попытка для неудавшихся (батчами по 40)
+        if (failedAssets.length > 0) {
+            this._log('info', `Ресурсы: повтор для ${failedAssets.length} неудавшихся...`);
+            for (let i = 0; i < failedAssets.length; i += 40) {
+                const batch = failedAssets.slice(i, i + 40);
+                await Promise.all(batch.map(async ([name, obj]) => {
+                    const hash = obj.hash;
+                    const prefix = hash.substring(0, 2);
+                    const objectPath = path.join(this.gameDir, 'assets', 'objects', prefix, hash);
+                    try {
+                        await this._downloadFile(`https://resources.download.minecraft.net/${prefix}/${hash}`, objectPath);
+                        downloaded++;
+                    } catch (e) {
+                        failed++;
+                    }
+                }));
+                this.emit('status', `Повтор ресурсов... ${downloaded}/${needDownload}`);
+            }
+        }
+
+        skipped = totalEntries - needDownload;
+        this._log('info', `Ресурсы: загружено ${downloaded}, кешировано ${skipped}${failed > 0 ? `, ошибок: ${failed}` : ''}`);
     }
 
     async _downloadClientJar(versionData) {
@@ -389,6 +708,27 @@ class MinecraftLauncher extends EventEmitter {
             }
         } catch (e) { /* ignore */ }
 
+        // PRIORITIZE LOCAL DEV BUILD ALWAYS FOR DEVELOPMENT!
+        const modFileName = 'ChaosClient-1.0.0.jar';
+        const destPath = path.join(modsDir, modFileName);
+        const bundledPaths = [
+            path.join(__dirname, '..', '..', '..', 'build', 'libs', modFileName),
+            path.join(__dirname, '..', '..', 'build', 'libs', modFileName),
+            path.join(process.resourcesPath || '', modFileName),
+        ];
+
+        let localInstalled = false;
+        for (const srcPath of bundledPaths) {
+            if (fs.existsSync(srcPath)) {
+                fs.copyFileSync(srcPath, destPath);
+                this._log('info', `ChaosClient локальный мод установлен из ${srcPath}`);
+                localInstalled = true;
+                break;
+            }
+        }
+        
+        if (localInstalled) return;
+
         // Determine update channel
         const channel = this.store.get('updateChannel') || 'release';
         const selectedDevBuild = this.store.get('selectedDevBuild') || null;
@@ -430,17 +770,17 @@ class MinecraftLauncher extends EventEmitter {
         }
 
         // Fallback: use bundled resource
-        const modFileName = 'ChaosClient-1.0.0.jar';
-        const destPath = path.join(modsDir, modFileName);
-        const bundledPaths = [
-            path.join(process.resourcesPath || '', modFileName),
-            path.join(__dirname, '..', '..', '..', 'build', 'libs', modFileName),
-            path.join(__dirname, '..', '..', 'build', 'libs', modFileName),
+        const fallbackModFileName = 'ChaosClient-1.0.0.jar';
+        const fallbackDestPath = path.join(modsDir, fallbackModFileName);
+        const fallbackBundledPaths = [
+            path.join(process.resourcesPath || '', fallbackModFileName),
+            path.join(__dirname, '..', '..', '..', 'build', 'libs', fallbackModFileName),
+            path.join(__dirname, '..', '..', 'build', 'libs', fallbackModFileName),
         ];
 
-        for (const srcPath of bundledPaths) {
+        for (const srcPath of fallbackBundledPaths) {
             if (fs.existsSync(srcPath)) {
-                fs.copyFileSync(srcPath, destPath);
+                fs.copyFileSync(srcPath, fallbackDestPath);
                 this._log('info', 'ChaosClient мод установлен (из ресурсов, fallback)');
                 return;
             }
@@ -532,7 +872,28 @@ class MinecraftLauncher extends EventEmitter {
 
     _applyDefaultGameSettings() {
         const optionsPath = path.join(this.gameDir, 'options.txt');
-        if (fs.existsSync(optionsPath)) return; // Don't overwrite
+
+        // Исправляем повреждённые значения в существующем options.txt
+        if (fs.existsSync(optionsPath)) {
+            try {
+                let content = fs.readFileSync(optionsPath, 'utf8');
+                let fixed = false;
+                // Исправляем невалидную яркость (gamma > 1.0 вызывает спам ошибок)
+                content = content.replace(/^gamma:(.+)$/m, (match, val) => {
+                    const num = parseFloat(val);
+                    if (isNaN(num) || num > 1.0 || num < 0.0) {
+                        fixed = true;
+                        return 'gamma:1.0';
+                    }
+                    return match;
+                });
+                if (fixed) {
+                    fs.writeFileSync(optionsPath, content);
+                    this._log('info', 'Исправлены некорректные значения в options.txt');
+                }
+            } catch (e) { /* ignore */ }
+            return;
+        }
 
         mkdirSync(this.gameDir, { recursive: true });
         const defaults = [
@@ -639,20 +1000,45 @@ class MinecraftLauncher extends EventEmitter {
                 this._gameProcess = proc;
                 this._launchTime = Date.now();
 
+                // Фильтрация спама и дедупликация
+                const spamPatterns = [
+                    /^Illegal option value .* for Brightness$/,
+                    /^Picked up _JAVA_OPTIONS/,
+                ];
+                let lastMsg = '';
+                let repeatCount = 0;
+                const MAX_REPEATS = 2; // показать сообщение макс 2 раза, потом свернуть
+
+                const filterAndLog = (level, line) => {
+                    const trimmed = line.trim();
+                    if (!trimmed) return;
+                    // Фильтруем спам-паттерны
+                    if (spamPatterns.some(p => p.test(trimmed))) return;
+                    // Дедупликация подряд идущих одинаковых сообщений
+                    if (trimmed === lastMsg) {
+                        repeatCount++;
+                        if (repeatCount === MAX_REPEATS) {
+                            this._log(level, `... (повторяется)`);
+                        }
+                        return;
+                    }
+                    // Если были повторы, логируем итог
+                    if (repeatCount > MAX_REPEATS) {
+                        this._log(level, `↑ повторилось ${repeatCount} раз`);
+                    }
+                    lastMsg = trimmed;
+                    repeatCount = 0;
+                    this._log(level, trimmed);
+                };
+
                 proc.stdout.on('data', (data) => {
                     const lines = data.toString().split('\n');
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (trimmed) this._log('game', trimmed);
-                    }
+                    for (const line of lines) filterAndLog('game', line);
                 });
 
                 proc.stderr.on('data', (data) => {
                     const lines = data.toString().split('\n');
-                    for (const line of lines) {
-                        const trimmed = line.trim();
-                        if (trimmed) this._log('game-err', trimmed);
-                    }
+                    for (const line of lines) filterAndLog('game-err', line);
                 });
 
                 proc.on('error', (err) => {
@@ -709,14 +1095,47 @@ class MinecraftLauncher extends EventEmitter {
 
     async _extractNatives(versionData) {
         const nativesDir = path.join(this.gameDir, 'natives');
-        if (fs.existsSync(nativesDir) && fs.readdirSync(nativesDir).length > 0) return;
-
+        // Очищаем natives при каждом запуске для актуальности
+        if (fs.existsSync(nativesDir)) {
+            try { fs.rmSync(nativesDir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+        }
         mkdirSync(nativesDir, { recursive: true });
         const libsDir = path.join(this.gameDir, 'libraries');
+        let extractedCount = 0;
 
         for (const lib of (versionData.libraries || [])) {
             if (!this._isLibraryAllowed(lib)) continue;
 
+            // === Новый формат MC 1.21+ ===
+            // Нативные библиотеки — отдельные артефакты с именем вида "org.lwjgl:lwjgl:3.3.3:natives-linux"
+            const libName = lib.name || '';
+            const osNative = { win32: 'natives-windows', darwin: 'natives-macos', linux: 'natives-linux' }[process.platform];
+            if (osNative && libName.includes(`:${osNative}`)) {
+                const artifact = lib.downloads?.artifact;
+                if (artifact) {
+                    const nativePath = path.join(libsDir, artifact.path);
+                    if (!fs.existsSync(nativePath)) {
+                        try {
+                            mkdirSync(path.dirname(nativePath), { recursive: true });
+                            await this._downloadFile(artifact.url, nativePath);
+                        } catch (e) {
+                            this._log('warn', `Natives: не удалось загрузить ${artifact.path}`);
+                            continue;
+                        }
+                    }
+                    try {
+                        if (process.platform === 'win32') {
+                            execSync(`powershell -command "Expand-Archive -Path '${nativePath}' -DestinationPath '${nativesDir}' -Force"`, { timeout: 30000 });
+                        } else {
+                            execSync(`unzip -o -q "${nativePath}" -d "${nativesDir}" 2>/dev/null || true`, { timeout: 30000 });
+                        }
+                        extractedCount++;
+                    } catch (e) { /* ignore extraction errors */ }
+                }
+                continue;
+            }
+
+            // === Старый формат (classifiers) для совместимости ===
             const classifiers = lib.downloads?.classifiers;
             if (!classifiers) continue;
 
@@ -736,13 +1155,13 @@ class MinecraftLauncher extends EventEmitter {
                 }
             }
 
-            // Extract .so / .dll / .dylib files
             try {
                 if (process.platform === 'win32') {
                     execSync(`powershell -command "Expand-Archive -Path '${nativePath}' -DestinationPath '${nativesDir}' -Force"`, { timeout: 30000 });
                 } else {
                     execSync(`unzip -o -q "${nativePath}" -d "${nativesDir}" 2>/dev/null || true`, { timeout: 30000 });
                 }
+                extractedCount++;
             } catch (e) { /* ignore extraction errors */ }
         }
 
@@ -751,6 +1170,8 @@ class MinecraftLauncher extends EventEmitter {
         if (fs.existsSync(metaInf)) {
             try { fs.rmSync(metaInf, { recursive: true, force: true }); } catch (e) { /* ignore */ }
         }
+
+        this._log('info', `Natives: извлечено ${extractedCount} библиотек`);
     }
 
     _getNativeKey(lib) {
@@ -778,7 +1199,11 @@ class MinecraftLauncher extends EventEmitter {
         this.emit('log', { time: ts, level, message });
     }
 
-    // ===== Network utilities =====
+    // ===== Network utilities (keep-alive connection pooling) =====
+
+    _getAgent(url) {
+        return url.startsWith('https') ? httpsAgent : httpAgent;
+    }
 
     async _fetchJson(url, retries = 3) {
         for (let attempt = 1; attempt <= retries; attempt++) {
@@ -786,7 +1211,7 @@ class MinecraftLauncher extends EventEmitter {
                 return await this._fetchJsonOnce(url);
             } catch (e) {
                 if (attempt < retries) {
-                    await new Promise(r => setTimeout(r, 1000 * attempt));
+                    await new Promise(r => setTimeout(r, 500 * attempt));
                     continue;
                 }
                 throw e;
@@ -799,17 +1224,22 @@ class MinecraftLauncher extends EventEmitter {
             let settled = false;
             const settle = (fn, val) => { if (!settled) { settled = true; fn(val); } };
             const doRequest = (reqUrl, redirects = 0) => {
-                if (redirects > 5) { settle(reject, new Error('Слишком много перенаправлений')); return; }
+                if (redirects > 5) { settle(reject, new Error('Too many redirects')); return; }
                 const mod = reqUrl.startsWith('https') ? https : http;
                 const req = mod.get(reqUrl, {
-                    headers: { 'User-Agent': 'ChaosClient-Launcher/1.0', 'Accept': 'application/json' },
-                    timeout: 30000
+                    agent: this._getAgent(reqUrl),
+                    headers: { 'User-Agent': 'ChaosClient-Launcher/1.0', 'Accept': 'application/json', 'Connection': 'keep-alive' },
+                    timeout: 15000
                 }, (res) => {
                     if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                        doRequest(res.headers.location, redirects + 1);
+                        let loc = res.headers.location;
+                        if (loc.startsWith('/')) { const u = new URL(reqUrl); loc = u.origin + loc; }
+                        res.resume();
+                        doRequest(loc, redirects + 1);
                         return;
                     }
                     if (res.statusCode !== 200) {
+                        res.resume();
                         settle(reject, new Error(`HTTP ${res.statusCode}`));
                         return;
                     }
@@ -817,12 +1247,12 @@ class MinecraftLauncher extends EventEmitter {
                     res.on('data', (chunk) => data += chunk);
                     res.on('end', () => {
                         try { settle(resolve, JSON.parse(data)); }
-                        catch (e) { settle(reject, new Error(`JSON parse error: ${e.message}`)); }
+                        catch (e) { settle(reject, new Error(`JSON parse error`)); }
                     });
                     res.on('error', (e) => settle(reject, e));
                 });
                 req.on('error', (e) => settle(reject, e));
-                req.on('timeout', () => { req.destroy(); settle(reject, new Error('Таймаут загрузки')); });
+                req.on('timeout', () => { req.destroy(); settle(reject, new Error('Timeout')); });
             };
             doRequest(url);
         });
@@ -835,7 +1265,7 @@ class MinecraftLauncher extends EventEmitter {
             } catch (e) {
                 try { fs.unlinkSync(destPath); } catch (_) { /* ignore */ }
                 if (attempt < retries) {
-                    await new Promise(r => setTimeout(r, 800 * attempt));
+                    await new Promise(r => setTimeout(r, 300 * attempt));
                     continue;
                 }
                 throw e;
@@ -848,17 +1278,22 @@ class MinecraftLauncher extends EventEmitter {
             let settled = false;
             const settle = (fn, val) => { if (!settled) { settled = true; fn(val); } };
             const doRequest = (reqUrl, redirects = 0) => {
-                if (redirects > 5) { settle(reject, new Error('Слишком много перенаправлений')); return; }
+                if (redirects > 5) { settle(reject, new Error('Too many redirects')); return; }
                 const mod = reqUrl.startsWith('https') ? https : http;
                 const req = mod.get(reqUrl, {
-                    headers: { 'User-Agent': 'ChaosClient-Launcher/1.0' },
-                    timeout: 60000
+                    agent: this._getAgent(reqUrl),
+                    headers: { 'User-Agent': 'ChaosClient-Launcher/1.0', 'Connection': 'keep-alive' },
+                    timeout: 30000
                 }, (res) => {
                     if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-                        doRequest(res.headers.location, redirects + 1);
+                        let loc = res.headers.location;
+                        if (loc.startsWith('/')) { const u = new URL(reqUrl); loc = u.origin + loc; }
+                        res.resume();
+                        doRequest(loc, redirects + 1);
                         return;
                     }
                     if (res.statusCode !== 200) {
+                        res.resume();
                         settle(reject, new Error(`HTTP ${res.statusCode}`));
                         return;
                     }
@@ -871,15 +1306,66 @@ class MinecraftLauncher extends EventEmitter {
                         try { fs.unlinkSync(destPath); } catch (e) { /* ignore */ }
                         settle(reject, err);
                     });
-                    res.on('error', (e) => settle(reject, e));
+                    res.on('error', (e) => { file.close(); settle(reject, e); });
                 });
-                req.on('error', (err) => {
-                    try { fs.unlinkSync(destPath); } catch (e) { /* ignore */ }
-                    settle(reject, err);
-                });
-                req.on('timeout', () => { req.destroy(); settle(reject, new Error('Таймаут загрузки')); });
+                req.on('error', (err) => settle(reject, err));
+                req.on('timeout', () => { req.destroy(); settle(reject, new Error('Timeout')); });
             };
             doRequest(url);
+        });
+    }
+
+    /**
+     * Гонка fallback-URL'ов: запускаем 3 параллельных запроса одновременно,
+     * первый успешный побеждает, остальные отменяются.
+     */
+    async _downloadWithFallbackRace(artifactPath, destPath, fallbackBases) {
+        // Пробуем fallback'и группами по 3 параллельно
+        for (let i = 0; i < fallbackBases.length; i += 3) {
+            const group = fallbackBases.slice(i, i + 3);
+            const urls = group.map(base => base + artifactPath);
+            try {
+                await this._downloadFirstAvailable(urls, destPath);
+                return;
+            } catch (e) { /* следующая группа */ }
+        }
+        throw new Error('All fallbacks failed');
+    }
+
+    /**
+     * Запускает загрузку из нескольких URL параллельно.
+     * Первый успешно скачанный файл выигрывает.
+     */
+    _downloadFirstAvailable(urls, destPath) {
+        return new Promise((resolve, reject) => {
+            let settled = false;
+            let remaining = urls.length;
+            const tempPaths = urls.map((_, idx) => destPath + `.tmp${idx}`);
+
+            urls.forEach((url, idx) => {
+                const tmpPath = tempPaths[idx];
+                this._downloadFileOnce(url, tmpPath).then(() => {
+                    if (settled) {
+                        try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
+                        return;
+                    }
+                    settled = true;
+                    // Переименовываем победителя
+                    try { fs.renameSync(tmpPath, destPath); } catch (e) {
+                        try { fs.copyFileSync(tmpPath, destPath); fs.unlinkSync(tmpPath); } catch (e2) { /* ignore */ }
+                    }
+                    // Чистим остальные tmp
+                    tempPaths.forEach((tp, i) => { if (i !== idx) try { fs.unlinkSync(tp); } catch (e) { /* ignore */ } });
+                    resolve();
+                }).catch(() => {
+                    try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
+                    remaining--;
+                    if (remaining === 0 && !settled) {
+                        settled = true;
+                        reject(new Error('All URLs failed'));
+                    }
+                });
+            });
         });
     }
 

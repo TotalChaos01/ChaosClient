@@ -41,7 +41,8 @@ function createWindow() {
             preload: path.join(__dirname, '../preload/preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
-            sandbox: false
+            sandbox: false,
+            devTools: false
         },
         icon: path.join(__dirname, '../../build/icon.png'),
         titleBarStyle: 'hidden',
@@ -51,6 +52,13 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
     mainWindow.once('ready-to-show', () => mainWindow.show());
     mainWindow.on('closed', () => { mainWindow = null; });
+
+    // Блокировка F5/F12/Ctrl+R/Ctrl+Shift+I — запрет обновления и DevTools
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.key === 'F5' || input.key === 'F12') { event.preventDefault(); return; }
+        if (input.control && input.key.toLowerCase() === 'r') { event.preventDefault(); return; }
+        if (input.control && input.shift && input.key.toLowerCase() === 'i') { event.preventDefault(); return; }
+    });
 }
 
 app.whenReady().then(createWindow);

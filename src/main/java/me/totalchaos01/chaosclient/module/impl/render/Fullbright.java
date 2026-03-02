@@ -5,41 +5,32 @@ import me.totalchaos01.chaosclient.event.events.EventTick;
 import me.totalchaos01.chaosclient.module.Category;
 import me.totalchaos01.chaosclient.module.Module;
 import me.totalchaos01.chaosclient.module.ModuleInfo;
-import me.totalchaos01.chaosclient.setting.impl.NumberSetting;
+import net.minecraft.entity.effect.StatusEffectInstance;
+import net.minecraft.entity.effect.StatusEffects;
 
-/**
- * Makes the world fully bright regardless of light level.
- */
-@ModuleInfo(name = "Fullbright", description = "Maximum brightness", category = Category.RENDER)
+@ModuleInfo(name = "Fullbright", description = "Maximum brightness via Night Vision", category = Category.RENDER)
 public class Fullbright extends Module {
 
-    private final NumberSetting gamma = new NumberSetting("Gamma", 16.0, 1.0, 16.0, 0.5);
-
-    private double previousGamma;
-
-    public Fullbright() {
-        addSettings(gamma);
-    }
+    public Fullbright() {}
 
     @Override
     protected void onEnable() {
-        if (mc.options != null) {
-            previousGamma = mc.options.getGamma().getValue();
-            mc.options.getGamma().setValue(gamma.getValue());
+        if (mc.player != null) {
+            mc.player.addStatusEffect(new StatusEffectInstance(StatusEffects.NIGHT_VISION, 999999, 0, false, false, false));
         }
     }
 
     @Override
     protected void onDisable() {
-        if (mc.options != null) {
-            mc.options.getGamma().setValue(previousGamma);
+        if (mc.player != null) {
+            mc.player.removeStatusEffect(StatusEffects.NIGHT_VISION);
         }
     }
 
     @EventTarget
     public void onTick(EventTick event) {
-        if (mc.options != null) {
-            mc.options.getGamma().setValue(gamma.getValue());
+        if (mc.player != null && !mc.player.hasStatusEffect(StatusEffects.NIGHT_VISION)) {
+            mc.player.addStatusEffect(new StatusEffectInstance(StatusEffects.NIGHT_VISION, 999999, 0, false, false, false));
         }
     }
 }

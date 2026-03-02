@@ -1,45 +1,59 @@
 package me.totalchaos01.chaosclient.notification;
 
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
+
+import java.util.Deque;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 /**
- * Manages on-screen notifications for the client.
+ * Rise-style notification manager — stacks notifications from bottom-right,
+ * auto-removes expired ones, renders with smooth slide-in animation.
  */
 public class NotificationManager {
 
-    private final List<Notification> notifications = new CopyOnWriteArrayList<>();
+    private final Deque<Notification> notifications = new ConcurrentLinkedDeque<>();
+    private static final MinecraftClient mc = MinecraftClient.getInstance();
 
     public void add(String title, String message, NotificationType type, long durationMs) {
         notifications.add(new Notification(title, message, type, System.currentTimeMillis(), durationMs));
     }
 
     public void add(String message, NotificationType type) {
-        add("ChaosClient", message, type, 3000);
+        // Duration scales with message length (Rise-style)
+        long duration = Math.max(2000, mc.textRenderer.getWidth(message) * 30L);
+        add("ChaosClient", message, type, duration);
     }
 
-    public void info(String message) {
-        add(message, NotificationType.INFO);
-    }
+    public void info(String message) { add(message, NotificationType.INFO); }
+    public void warning(String message) { add(message, NotificationType.WARNING); }
+    public void error(String message) { add(message, NotificationType.ERROR); }
+    public void success(String message) { add(message, NotificationType.SUCCESS); }
 
-    public void warning(String message) {
-        add(message, NotificationType.WARNING);
-    }
+    /**
+     * Render all active notifications — called from EventRender2D.
+     */
+    public void render(DrawContext ctx) {
+        // Remove expired
+        notifications.removeIf(Notification::isExpired);
 
-    public void error(String message) {
-        add(message, NotificationType.ERROR);
-    }
+        if (notifications.isEmpty()) return;
 
-    public void success(String message) {
-        add(message, NotificationType.SUCCESS);
+        int sh = mc.getWindow().getScaledHeight();
+        int i = 0;
+
+        for (Notification notification : notifications) {
+            notification.targetY = sh - 50 - (35 * i);
+            notification.render(ctx);
+            i++;
+        }
     }
 
     /**
-     * Returns active notifications and cleans up expired ones.
+     * Returns active (non-expired) notifications.
      */
-    public List<Notification> getActiveNotifications() {
-        long now = System.currentTimeMillis();
-        notifications.removeIf(n -> now - n.createdAt() > n.durationMs());
+    public Deque<Notification> getActiveNotifications() {
+        notifications.removeIf(Notification::isExpired);
         return notifications;
     }
 }

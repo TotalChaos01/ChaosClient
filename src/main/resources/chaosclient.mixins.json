@@ -11,10 +11,11 @@
     "MixinClientPlayerEntity",
     "MixinGameRenderer",
     "MixinInGameHud",
-    "MixinKeyboard"
+    "MixinKeyboard",
+    "MixinTitleScreen",
+    "MixinSplashOverlay"
   ],
   "injectors": {
     "defaultRequire": 1
   }
 }
-

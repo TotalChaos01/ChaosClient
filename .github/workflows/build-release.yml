@@ -88,9 +88,9 @@ jobs:
         working-directory: launcher
         run: npm ci
 
-      - name: Build Windows exe
+      - name: Build Windows portable exe
         working-directory: launcher
-        run: npx electron-builder --win nsis
+        run: npx electron-builder --win portable
 
       - name: Upload Windows build
         uses: actions/upload-artifact@v4
@@ -121,7 +121,7 @@ jobs:
             ## ChaosClient ${{ github.ref_name }}
 
             ### Загрузки
-            - **Windows**: `ChaosClient Launcher Setup *.exe` — установщик для Windows 10/11 x64
+            - **Windows**: `ChaosClient-*-Portable.exe` — портативный exe для Windows 10/11 x64 (не требует установки)
             - **Linux AppImage**: `ChaosClient Launcher-*.AppImage` — универсальный формат для Linux
             - **Linux deb**: `chaosclient-launcher_*_amd64.deb` — для Ubuntu/Debian
             - **Мод JAR**: `ChaosClient-*.jar` — мод для Fabric 1.21.11

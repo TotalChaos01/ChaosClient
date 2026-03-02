@@ -7,18 +7,23 @@ import me.totalchaos01.chaosclient.ui.clickgui.ClickGuiScreen;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * Opens the click GUI for module configuration.
+ * Opens the Rise-style Click GUI for module configuration.
+ * Press Right Shift to open.
  */
-@ModuleInfo(name = "ClickGui", description = "Opens the module configuration GUI", category = Category.RENDER, keyBind = GLFW.GLFW_KEY_RIGHT_SHIFT)
+@ModuleInfo(name = "ClickGui", description = "Opens the Rise-style configuration GUI", category = Category.RENDER, keyBind = GLFW.GLFW_KEY_RIGHT_SHIFT)
 public class ClickGui extends Module {
 
-    private final ClickGuiScreen screen = new ClickGuiScreen();
+    private ClickGuiScreen screen;
 
     @Override
     protected void onEnable() {
         if (mc.player != null) {
+            if (screen == null) {
+                screen = new ClickGuiScreen();
+            }
             mc.setScreen(screen);
         }
-        toggle(); // immediately disable — it's a one-shot toggle that opens the screen
+        // Immediately disable — it's a one-shot toggle
+        setEnabled(false);
     }
 }

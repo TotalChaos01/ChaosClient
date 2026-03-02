@@ -286,6 +286,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         isLaunching = true; launchBtn.disabled = true;
+        gameLaunched = false;
         launchBtn.classList.add('launching');
         launchBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>ЗАПУСК...</span>';
         progressContainer.style.display = 'flex'; progressFill.style.background = '';
@@ -294,12 +295,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const result = await launcher.launch();
             if (result.success) {
+                gameLaunched = true;
                 progressFill.style.width = '100%';
                 progressText.textContent = 'ChaosClient запущен!';
                 launchBtn.innerHTML = '<i class="fas fa-check"></i> <span>ЗАПУЩЕН</span>';
                 playSuccessSound();
                 // Показать монитор
-                showProcessMonitor(result.pid);
+
             } else { throw new Error(result.error); }
         } catch (err) {
             progressText.textContent = `Ошибка: ${err.message}`;
@@ -311,54 +313,26 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         setTimeout(() => {
             isLaunching = false; launchBtn.disabled = false;
+            gameLaunched = false;
             launchBtn.classList.remove('launching');
             launchBtn.innerHTML = '<i class="fas fa-play"></i> <span>ЗАПУСК</span> <div class="btn-glow"></div>';
             progressContainer.style.display = 'none'; progressFill.style.width = '0%'; progressFill.style.background = '';
         }, 5000);
     });
 
-    // ===== Монитор процесса =====
-    let monitorInterval = null;
-    let gameStartTime = null;
-
-    function showProcessMonitor(pid) {
-        const monitor = document.getElementById('process-monitor');
-        monitor.style.display = 'block';
-        document.getElementById('monitor-pid').textContent = pid ? `PID ${pid}` : '';
-        document.getElementById('monitor-status').textContent = 'Запущен';
-        gameStartTime = Date.now();
-
-        if (monitorInterval) clearInterval(monitorInterval);
-        monitorInterval = setInterval(async () => {
-            const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
-            const min = Math.floor(elapsed / 60);
-            const sec = elapsed % 60;
-            document.getElementById('monitor-uptime').textContent = `${min}:${sec.toString().padStart(2, '0')}`;
-            try {
-                const stats = await launcher.getProcessStats();
-                if (stats) {
-                    document.getElementById('monitor-memory').textContent = `${stats.memoryMB} МБ`;
-                    document.getElementById('monitor-cpu').textContent = `${stats.cpu}%`;
-                }
-            } catch (e) { /* ignore */ }
-        }, 2000);
-    }
-
-    function hideProcessMonitor() {
-        if (monitorInterval) { clearInterval(monitorInterval); monitorInterval = null; }
-        document.getElementById('monitor-status').textContent = 'Остановлен';
-        setTimeout(() => {
-            document.getElementById('process-monitor').style.display = 'none';
-        }, 5000);
-    }
 
     // ===== Обработка событий =====
+    let gameLaunched = false;
+
     launcher.onProgress((data) => {
         if (data.percent !== undefined) progressFill.style.width = `${data.percent}%`;
     });
 
     launcher.onStatus((msg) => {
-        progressText.textContent = msg || '';
+        // Статус показывается ТОЛЬКО на прогресс-баре во время запуска, не после
+        if (!gameLaunched) {
+            progressText.textContent = msg || '';
+        }
     });
 
     // ===== Логи (только на вкладке Логи) =====
@@ -368,7 +342,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const autoscrollCheck = document.getElementById('log-autoscroll');
     const filterButtons = document.querySelectorAll('.log-filter-btn');
     let currentFilter = 'all';
-    const MAX_LOG_ENTRIES = 5000;
+    const MAX_LOG_ENTRIES = 300;
     let logCount = 0;
 
     filterButtons.forEach(btn => {
@@ -389,19 +363,46 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // Дедупликация логов в UI
+    let lastLogMsg = '';
+    let lastLogEl = null;
+    let logRepeatCounter = 0;
+
     function addLogEntry(entry) {
         if (!entry || !entry.message) return;
         if (logEmpty) logEmpty.style.display = 'none';
-        const el = document.createElement('div');
         const level = entry.level || 'info';
+        const msg = entry.message;
+
+        // Дедупликация — если то же самое сообщение подряд, обновляем счётчик
+        if (msg === lastLogMsg && lastLogEl) {
+            logRepeatCounter++;
+            const badge = lastLogEl.querySelector('.log-repeat');
+            if (badge) {
+                badge.textContent = `×${logRepeatCounter}`;
+            } else {
+                const b = document.createElement('span');
+                b.className = 'log-repeat';
+                b.textContent = `×${logRepeatCounter}`;
+                lastLogEl.querySelector('.log-message').appendChild(b);
+            }
+            if (autoscrollCheck && autoscrollCheck.checked) logsContainer.scrollTop = logsContainer.scrollHeight;
+            return;
+        }
+
+        lastLogMsg = msg;
+        logRepeatCounter = 1;
+
+        const el = document.createElement('div');
         el.className = `log-entry level-${level}`;
         const levelLabels = { 'info': 'ИНФО', 'warn': 'ПРЕД', 'error': 'ОШИБ', 'game': 'ИГРА', 'game-err': 'STDERR' };
-        el.innerHTML = `<span class="log-time">${escapeHtml(entry.time || '')}</span><span class="log-level">${levelLabels[level] || level.toUpperCase()}</span><span class="log-message">${escapeHtml(entry.message)}</span>`;
+        el.innerHTML = `<span class="log-time">${escapeHtml(entry.time || '')}</span><span class="log-level">${levelLabels[level] || level.toUpperCase()}</span><span class="log-message">${escapeHtml(msg)}</span>`;
         if (currentFilter !== 'all') {
             if (currentFilter === 'game') { if (level !== 'game' && level !== 'game-err') el.style.display = 'none'; }
             else if (level !== currentFilter) el.style.display = 'none';
         }
         logEntries.appendChild(el);
+        lastLogEl = el;
         logCount++;
         if (logCount > MAX_LOG_ENTRIES) { const first = logEntries.firstChild; if (first) { logEntries.removeChild(first); logCount--; } }
         if (autoscrollCheck && autoscrollCheck.checked) logsContainer.scrollTop = logsContainer.scrollHeight;
@@ -416,7 +417,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             addLogEntry({ time: ts, level: 'warn', message: `━━━ Minecraft завершился сигналом ${data.signal} ━━━` });
         }
-        hideProcessMonitor();
+
     });
 
     document.getElementById('btn-copy-logs').addEventListener('click', () => {
@@ -436,11 +437,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     document.getElementById('btn-clear-logs').addEventListener('click', () => {
         logEntries.innerHTML = ''; logCount = 0;
+        lastLogMsg = ''; lastLogEl = null; logRepeatCounter = 0;
         if (logEmpty) logEmpty.style.display = '';
     });
 
-    // ===== Горячие клавиши =====
-    document.addEventListener('keydown', (e) => { if (e.key === 'F5') location.reload(); });
+    // ===== Горячие клавиши (F5/F12 заблокированы в main.js) =====
 
     // ===== Страница билдов =====
     initDevBuildsPage();
@@ -592,13 +593,18 @@ async function loadNews() {
                 const card = document.createElement('div');
                 card.className = 'news-card';
                 const tagClass = item.tag === 'Релиз' ? 'tag-release' : item.tag === 'Исправление' ? 'tag-fix' : 'tag-feature';
+                const iconClass = item.tag === 'Релиз' ? 'icon-release' : item.tag === 'Исправление' ? 'icon-fix' : 'icon-feature';
+                const iconName = item.tag === 'Релиз' ? 'fa-rocket' : item.tag === 'Исправление' ? 'fa-wrench' : 'fa-sparkles';
                 card.innerHTML = `
-                    <div class="news-header">
-                        <span class="news-tag ${tagClass}">${escapeHtml(item.tag)}</span>
-                        <span class="news-date">${escapeHtml(item.date)}</span>
-                    </div>
-                    <h3 class="news-card-title">${escapeHtml(item.title)}</h3>
-                    <p class="news-card-text">${escapeHtml(item.text)}</p>`;
+                    <div class="news-card-body">
+                        <div class="news-header">
+                            <div class="news-card-icon ${iconClass}"><i class="fas ${iconName}"></i></div>
+                            <span class="news-tag ${tagClass}">${escapeHtml(item.tag)}</span>
+                            <span class="news-date">${escapeHtml(item.date)}</span>
+                        </div>
+                        <h3 class="news-card-title">${escapeHtml(item.title)}</h3>
+                        <p class="news-card-text">${escapeHtml(item.text)}</p>
+                    </div>`;
                 list.appendChild(card);
             }
         }
