@@ -92,10 +92,12 @@ public class ESP extends Module {
         double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE;
         double maxX = -Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
         boolean anyVisible = false;
+        int visibleCount = 0;
 
         for (double[] corner : corners) {
             double[] screen = RenderUtil.worldToScreen(corner[0], corner[1], corner[2]);
-            if (screen == null) continue;
+            if (screen == null || screen[2] < 0 || screen[2] > 1.0) continue;
+            visibleCount++;
             anyVisible = true;
             minX = Math.min(minX, screen[0]);
             minY = Math.min(minY, screen[1]);
@@ -103,7 +105,7 @@ public class ESP extends Module {
             maxY = Math.max(maxY, screen[1]);
         }
 
-        if (!anyVisible) return;
+        if (visibleCount < 4) return;
 
         int ix = (int) minX, iy = (int) minY;
         int bw = (int) (maxX - minX), bh = (int) (maxY - minY);

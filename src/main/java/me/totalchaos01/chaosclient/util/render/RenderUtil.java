@@ -86,13 +86,13 @@ public final class RenderUtil {
 
         int lw = Math.max(1, Math.round(lineWidth));
         int hlw = lw / 2;
-        int steps = Math.max(1, Math.min((int) (len * 1.5), 400));
+        int steps = Math.max(1, Math.min((int) (len * 0.4), 80));
 
         for (int i = 0; i <= steps; i++) {
             double t = (double) i / steps;
             int px = (int) Math.round(x1 + dx * t);
             int py = (int) Math.round(y1 + dy * t);
-            ctx.fill(px - hlw, py - hlw, px + hlw + 1, py + hlw + 1, color);
+            ctx.fill(px - hlw - 1, py - hlw - 1, px + hlw + 2, py + hlw + 2, color);
         }
     }
 
@@ -107,14 +107,14 @@ public final class RenderUtil {
 
         int lw = Math.max(1, Math.round(lineWidth));
         int hlw = lw / 2;
-        int steps = Math.max(1, Math.min((int) (len * 1.2), 300));
+        int steps = Math.max(1, Math.min((int) (len * 0.4), 80));
 
         for (int i = 0; i <= steps; i++) {
             double t = (double) i / steps;
             int px = (int) Math.round(x1 + dx * t);
             int py = (int) Math.round(y1 + dy * t);
             int color = ColorUtil.interpolateColor(startColor, endColor, (float) t);
-            ctx.fill(px - hlw, py - hlw, px + hlw + 1, py + hlw + 1, color);
+            ctx.fill(px - hlw - 1, py - hlw - 1, px + hlw + 2, py + hlw + 2, color);
         }
     }
 

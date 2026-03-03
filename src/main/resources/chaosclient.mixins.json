@@ -13,7 +13,8 @@
     "MixinInGameHud",
     "MixinKeyboard",
     "MixinTitleScreen",
-    "MixinSplashOverlay"
+    "MixinSplashOverlay",
+    "MixinMultiplayerScreen"
   ],
   "injectors": {
     "defaultRequire": 1
