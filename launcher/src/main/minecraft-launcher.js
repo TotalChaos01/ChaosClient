@@ -700,34 +700,21 @@ class MinecraftLauncher extends EventEmitter {
     }
 
     async _installClientMod(modsDir) {
-        // Remove any old ChaosClient jars first
+        // Find existing ChaosClient jars in mods folder
+        let existingMods = [];
         try {
-            const existingMods = fs.readdirSync(modsDir).filter(f => f.startsWith('ChaosClient') && f.endsWith('.jar'));
-            for (const old of existingMods) {
-                fs.unlinkSync(path.join(modsDir, old));
-            }
+            existingMods = fs.readdirSync(modsDir).filter(f => f.startsWith('ChaosClient') && f.endsWith('.jar'));
         } catch (e) { /* ignore */ }
 
-        // PRIORITIZE LOCAL DEV BUILD ALWAYS FOR DEVELOPMENT!
-        const modFileName = 'ChaosClient-1.0.0.jar';
-        const destPath = path.join(modsDir, modFileName);
-        const bundledPaths = [
-            path.join(__dirname, '..', '..', '..', 'build', 'libs', modFileName),
-            path.join(__dirname, '..', '..', 'build', 'libs', modFileName),
-            path.join(process.resourcesPath || '', modFileName),
-        ];
-
-        let localInstalled = false;
-        for (const srcPath of bundledPaths) {
-            if (fs.existsSync(srcPath)) {
-                fs.copyFileSync(srcPath, destPath);
-                this._log('info', `ChaosClient локальный мод установлен из ${srcPath}`);
-                localInstalled = true;
-                break;
+        // Check if an update was previously applied (stored in config)
+        const updatedModFile = this.store.get('updatedModFile') || null;
+        if (updatedModFile && existingMods.includes(updatedModFile)) {
+            const updatedPath = path.join(modsDir, updatedModFile);
+            if (fs.existsSync(updatedPath) && fs.statSync(updatedPath).size > 1000) {
+                this._log('info', `ChaosClient мод актуален: ${updatedModFile}`);
+                return;
             }
         }
-        
-        if (localInstalled) return;
 
         // Determine update channel
         const channel = this.store.get('updateChannel') || 'release';
@@ -735,10 +722,15 @@ class MinecraftLauncher extends EventEmitter {
 
         // DEV channel: use selected commit build if available
         if (channel === 'dev' && selectedDevBuild && selectedDevBuild.downloadUrl) {
-            const destPath = path.join(modsDir, selectedDevBuild.fileName || 'ChaosClient-dev.jar');
             try {
+                // Remove old jars before installing new one
+                for (const old of existingMods) {
+                    try { fs.unlinkSync(path.join(modsDir, old)); } catch (e) { /* ignore */ }
+                }
+                const devDest = path.join(modsDir, selectedDevBuild.fileName || 'ChaosClient-dev.jar');
                 this._log('info', `Загрузка дев-билда: ${selectedDevBuild.fileName}...`);
-                await this._downloadFile(selectedDevBuild.downloadUrl, destPath);
+                await this._downloadFile(selectedDevBuild.downloadUrl, devDest);
+                this.store.set('updatedModFile', selectedDevBuild.fileName || 'ChaosClient-dev.jar');
                 this._log('info', `ChaosClient дев-билд установлен: ${selectedDevBuild.fileName}`);
                 return;
             } catch (e) {
@@ -746,22 +738,28 @@ class MinecraftLauncher extends EventEmitter {
             }
         }
 
-        // RELEASE channel: download from GitHub releases
+        // RELEASE channel: try to get latest from GitHub
         try {
             const releasesUrl = 'https://api.github.com/repos/TotalChaos01/ChaosClient/releases/latest';
             const release = await this._fetchJson(releasesUrl);
             if (release?.assets) {
                 const modAsset = release.assets.find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient'));
                 if (modAsset) {
-                    const destPath = path.join(modsDir, modAsset.name);
+                    const ghDest = path.join(modsDir, modAsset.name);
                     // Check if we already have this exact version
-                    if (fs.existsSync(destPath) && fs.statSync(destPath).size === modAsset.size) {
+                    if (fs.existsSync(ghDest) && fs.statSync(ghDest).size === modAsset.size) {
                         this._log('info', `ChaosClient мод актуален (${modAsset.name})`);
+                        this.store.set('updatedModFile', modAsset.name);
                         return;
                     }
+                    // Remove old jars before downloading new
+                    for (const old of existingMods) {
+                        try { fs.unlinkSync(path.join(modsDir, old)); } catch (e) { /* ignore */ }
+                    }
                     this._log('info', `Загрузка ChaosClient ${release.tag_name} с GitHub...`);
-                    await this._downloadFile(modAsset.browser_download_url, destPath);
-                    this._log('info', `ChaosClient мод обновлён до ${release.tag_name}`);
+                    await this._downloadFile(modAsset.browser_download_url, ghDest);
+                    this.store.set('updatedModFile', modAsset.name);
+                    this._log('info', `ChaosClient мод обновлён: ${modAsset.name}`);
                     return;
                 }
             }
@@ -769,24 +767,30 @@ class MinecraftLauncher extends EventEmitter {
             this._log('warn', `Не удалось скачать мод с GitHub: ${e.message}`);
         }
 
-        // Fallback: use bundled resource
-        const fallbackModFileName = 'ChaosClient-1.0.0.jar';
-        const fallbackDestPath = path.join(modsDir, fallbackModFileName);
-        const fallbackBundledPaths = [
-            path.join(process.resourcesPath || '', fallbackModFileName),
-            path.join(__dirname, '..', '..', '..', 'build', 'libs', fallbackModFileName),
-            path.join(__dirname, '..', '..', 'build', 'libs', fallbackModFileName),
+        // If there's already a ChaosClient jar from previous install, keep it
+        if (existingMods.length > 0) {
+            this._log('info', `ChaosClient мод уже установлен: ${existingMods[0]} (офлайн)`);
+            return;
+        }
+
+        // Fallback: install from bundled resources (first launch / no internet)
+        const bundledFileName = 'ChaosClient-1.1.1.jar';
+        const bundledDest = path.join(modsDir, bundledFileName);
+        const bundledPaths = [
+            path.join(process.resourcesPath || '', bundledFileName),
+            path.join(__dirname, '..', '..', '..', 'build', 'libs', bundledFileName),
+            path.join(__dirname, '..', '..', 'build', 'libs', bundledFileName),
         ];
 
-        for (const srcPath of fallbackBundledPaths) {
+        for (const srcPath of bundledPaths) {
             if (fs.existsSync(srcPath)) {
-                fs.copyFileSync(srcPath, fallbackDestPath);
-                this._log('info', 'ChaosClient мод установлен (из ресурсов, fallback)');
+                fs.copyFileSync(srcPath, bundledDest);
+                this._log('info', `ChaosClient мод установлен из бандла: ${srcPath}`);
                 return;
             }
         }
 
-        this._log('warn', 'ChaosClient мод не найден — будет скопирован при сборке');
+        this._log('warn', 'ChaosClient мод не найден');
     }
 
     async _installFabricApi(modsDir) {

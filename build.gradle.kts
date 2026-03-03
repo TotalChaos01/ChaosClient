@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "me.totalchaos01"
-version = "1.0.0"
+version = "1.1.1"
 
 val minecraftVersion = "1.21.11"
 val yarnMappings = "1.21.11+build.4"

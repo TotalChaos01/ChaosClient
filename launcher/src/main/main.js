@@ -321,6 +321,8 @@ ipcMain.handle('app:applyModUpdate', async (event, assetInfo) => {
         const destPath = path.join(modsDir, assetInfo.name);
         // Use the mcLauncher downloader for retries
         await mcLauncher._downloadFile(assetInfo.url, destPath);
+        // Store the updated mod filename so _installClientMod won't overwrite it
+        store.set('updatedModFile', assetInfo.name);
         return { success: true, fileName: assetInfo.name };
     } catch (e) {
         return { success: false, error: e.message };

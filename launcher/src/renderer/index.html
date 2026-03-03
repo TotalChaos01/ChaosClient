@@ -24,7 +24,7 @@
         </div>
     </div>
 
-    <!-- Мастер первого запуска (выбор модов) -->
+    <!-- Мастер первого запуска -->
     <div class="wizard-overlay" id="wizard-overlay" style="display:none;">
         <div class="wizard-box">
             <div class="wizard-header">
@@ -119,13 +119,45 @@
                     </div>
                     
                     <div class="home-content">
-                        <!-- Логотип по центру (крупно) -->
+                        <!-- Логотип -->
                         <div class="home-brand">
                             <h1 class="home-title"><span class="gradient-text">Chaos</span>Client</h1>
                             <p class="home-subtitle">Универсальный клиент • Fabric 1.21.11</p>
                         </div>
 
-                        <!-- Нижняя панель запуска -->
+                        <!-- Статистика по центру -->
+                        <div class="home-stats">
+                            <div class="stat-card glass-panel">
+                                <i class="fas fa-cube"></i>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="stat-mods">0</span>
+                                    <span class="stat-label">Модулей</span>
+                                </div>
+                            </div>
+                            <div class="stat-card glass-panel">
+                                <i class="fas fa-puzzle-piece"></i>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="stat-installed-mods">0</span>
+                                    <span class="stat-label">Модов</span>
+                                </div>
+                            </div>
+                            <div class="stat-card glass-panel">
+                                <i class="fas fa-server"></i>
+                                <div class="stat-info">
+                                    <span class="stat-value">1.21.11</span>
+                                    <span class="stat-label">Minecraft</span>
+                                </div>
+                            </div>
+                            <div class="stat-card glass-panel" id="stat-game-card">
+                                <i class="fas fa-circle game-status-dot" id="game-status-dot"></i>
+                                <div class="stat-info">
+                                    <span class="stat-value" id="game-status-text">Не запущен</span>
+                                    <span class="stat-label" id="game-uptime-label">Статус</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Панель запуска -->
                         <div class="launch-card-wrapper">
                             <div class="launch-card glass-panel">
                                 <div class="player-info-large">
@@ -135,7 +167,7 @@
                                     </div>
                                     <div class="player-fields">
                                         <input type="text" id="username-input" class="username-input-large" placeholder="Ваш никнейм..." maxlength="16">
-                                        <span class="player-status-label"><i class="fas fa-circle" style="color:var(--success); font-size: 8px; margin-right:4px;"></i> Готов к запуску</span>
+                                        <span class="player-status-label" id="player-status-label"><i class="fas fa-circle" style="color:var(--success); font-size: 8px; margin-right:4px;"></i> Готов к запуску</span>
                                     </div>
                                 </div>
                                 
@@ -153,18 +185,41 @@
                             </div>
                         </div>
 
-                        <!-- Новости можно оставить сбоку или скрыть. Оставим их в виде красивых карточек -->
-                        <div class="news-floating-panel">
-                            <div class="news-list" id="news-list">
-                                <!-- Новости -->
-                                <div class="news-card glass-panel">
-                                    <div class="news-card-body">
-                                        <div class="news-header">
-                                            <div class="news-card-icon icon-release"><i class="fas fa-rocket"></i></div>
-                                            <span class="news-tag tag-release">Релиз</span>
-                                            <span class="news-date">ChaosClient v1.0.0</span>
+                        <!-- Новости + Быстрые действия -->
+                        <div class="home-bottom-row">
+                            <div class="news-floating-panel">
+                                <h3 class="section-title"><i class="fas fa-newspaper"></i> Новости</h3>
+                                <div class="news-list" id="news-list">
+                                    <div class="news-card glass-panel">
+                                        <div class="news-card-body">
+                                            <div class="news-header">
+                                                <div class="news-card-icon icon-release"><i class="fas fa-rocket"></i></div>
+                                                <span class="news-tag tag-release">Релиз</span>
+                                                <span class="news-date">ChaosClient v1.1.0</span>
+                                            </div>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                            <div class="quick-actions-panel">
+                                <h3 class="section-title"><i class="fas fa-bolt"></i> Быстрые действия</h3>
+                                <div class="quick-actions">
+                                    <button class="quick-btn glass-panel" id="qa-gamedir">
+                                        <i class="fas fa-folder-open"></i>
+                                        <span>Папка игры</span>
+                                    </button>
+                                    <button class="quick-btn glass-panel" id="qa-settings">
+                                        <i class="fas fa-cog"></i>
+                                        <span>Настройки</span>
+                                    </button>
+                                    <button class="quick-btn glass-panel" id="qa-updates">
+                                        <i class="fas fa-download"></i>
+                                        <span>Обновления</span>
+                                    </button>
+                                    <button class="quick-btn glass-panel" id="qa-github">
+                                        <i class="fab fa-github"></i>
+                                        <span>GitHub</span>
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -179,34 +234,21 @@
                     <h2><i class="fas fa-cog"></i> Настройки</h2>
                 </div>
                 <div class="settings-grid">
-                    <!-- Память -->
                     <div class="setting-card">
-                        <div class="setting-header">
-                            <i class="fas fa-memory"></i>
-                            <h3>Выделение памяти</h3>
-                        </div>
+                        <div class="setting-header"><i class="fas fa-memory"></i><h3>Выделение памяти</h3></div>
                         <div class="setting-body">
                             <input type="range" id="memory-slider" min="1024" max="16384" step="512" class="slider">
-                            <div class="slider-labels">
-                                <span>1 ГБ</span>
-                                <span class="slider-value" id="memory-value">4 ГБ</span>
-                                <span>16 ГБ</span>
-                            </div>
+                            <div class="slider-labels"><span>1 ГБ</span><span class="slider-value" id="memory-value">4 ГБ</span><span>16 ГБ</span></div>
                         </div>
                     </div>
-
-                    <!-- Java -->
                     <div class="setting-card">
-                        <div class="setting-header">
-                            <i class="fab fa-java"></i>
-                            <h3>Java</h3>
-                        </div>
+                        <div class="setting-header"><i class="fab fa-java"></i><h3>Java</h3></div>
                         <div class="setting-body">
                             <div class="java-mode-selector">
                                 <label class="radio-card" id="radio-bundled">
                                     <input type="radio" name="javaMode" value="bundled" checked>
                                     <span class="radio-label"><i class="fas fa-download"></i> Встроенная Java</span>
-                                    <span class="radio-desc">Автоматически скачивает Java 21 (Adoptium)</span>
+                                    <span class="radio-desc">Автоматически скачивает Java 21</span>
                                 </label>
                                 <label class="radio-card" id="radio-custom">
                                     <input type="radio" name="javaMode" value="custom">
@@ -215,14 +257,9 @@
                                 </label>
                             </div>
                             <div id="bundled-java-section" class="java-section">
-                                <div class="java-status" id="java-status">
-                                    <span class="status-icon" id="java-status-icon">⏳</span>
-                                    <span id="java-status-text">Проверка...</span>
-                                </div>
+                                <div class="java-status" id="java-status"><span class="status-icon" id="java-status-icon">⏳</span><span id="java-status-text">Проверка...</span></div>
                                 <button class="btn-action" id="install-java-btn" style="display:none;"><i class="fas fa-download"></i> Скачать Java 21</button>
-                                <div class="progress-bar-mini" id="java-progress-bar" style="display:none;">
-                                    <div class="progress-fill" id="java-progress-fill"></div>
-                                </div>
+                                <div class="progress-bar-mini" id="java-progress-bar" style="display:none;"><div class="progress-fill" id="java-progress-fill"></div></div>
                             </div>
                             <div id="custom-java-section" class="java-section" style="display:none;">
                                 <div id="detected-java-list" class="detected-java-list"></div>
@@ -238,13 +275,8 @@
                             </div>
                         </div>
                     </div>
-
-                    <!-- Папка игры -->
                     <div class="setting-card">
-                        <div class="setting-header">
-                            <i class="fas fa-folder"></i>
-                            <h3>Папка игры</h3>
-                        </div>
+                        <div class="setting-header"><i class="fas fa-folder"></i><h3>Папка игры</h3></div>
                         <div class="setting-body">
                             <div class="input-with-btn">
                                 <input type="text" id="game-dir" class="text-input" readonly>
@@ -254,17 +286,10 @@
                             <button class="btn-action btn-small" id="open-gamedir-btn"><i class="fas fa-external-link-alt"></i> Открыть папку</button>
                         </div>
                     </div>
-
-
-                    <!-- Обновления -->
                     <div class="setting-card">
-                        <div class="setting-header">
-                            <i class="fas fa-sync-alt"></i>
-                            <h3>Обновления</h3>
-                        </div>
+                        <div class="setting-header"><i class="fas fa-sync-alt"></i><h3>Обновления</h3></div>
                         <div class="setting-body">
-                            <div class="input-group">
-                                <label>Канал обновлений</label>
+                            <div class="input-group"><label>Канал обновлений</label>
                                 <select id="update-channel" class="select-input">
                                     <option value="release">Стабильные (Release)</option>
                                     <option value="dev">Дев-билды (Dev)</option>
@@ -274,35 +299,25 @@
                             <p class="setting-hint" id="update-status">Текущая версия: 1.0.0</p>
                         </div>
                     </div>
-
-                    <!-- Обслуживание -->
                     <div class="setting-card">
-                        <div class="setting-header">
-                            <i class="fas fa-tools"></i>
-                            <h3>Обслуживание</h3>
-                        </div>
+                        <div class="setting-header"><i class="fas fa-tools"></i><h3>Обслуживание</h3></div>
                         <div class="setting-body">
                             <button class="btn-action btn-danger" id="reinstall-btn"><i class="fas fa-redo"></i> Переустановить клиент</button>
-                            <p class="setting-hint">Удалит все файлы игры и переустановит с нуля (настройки лаунчера сохранятся)</p>
+                            <p class="setting-hint">Удалит файлы игры и переустановит с нуля</p>
                             <button class="btn-action btn-small" id="clear-mods-btn" style="margin-top:8px;"><i class="fas fa-trash"></i> Очистить моды</button>
-                            <p class="setting-hint">Удалит все моды, при следующем запуске они скачаются заново</p>
+                            <p class="setting-hint">Удалит все моды, они скачаются заново</p>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- БИЛДЫ (Dev Builds) -->
+            <!-- БИЛДЫ -->
             <div class="page" id="page-devbuilds">
-                <div class="page-header">
-                    <h2><i class="fas fa-code-branch"></i> Билды и обновления</h2>
-                </div>
+                <div class="page-header"><h2><i class="fas fa-code-branch"></i> Билды и обновления</h2></div>
                 <div class="devbuilds-content">
-                    <!-- Статус обновления -->
                     <div class="update-status-card" id="update-info-card">
                         <div class="update-status-header">
-                            <div class="update-status-icon" id="update-icon">
-                                <i class="fas fa-check-circle"></i>
-                            </div>
+                            <div class="update-status-icon" id="update-icon"><i class="fas fa-check-circle"></i></div>
                             <div class="update-status-text">
                                 <h3 id="update-title">Проверка обновлений...</h3>
                                 <p id="update-subtitle">Текущая версия: 1.0.0</p>
@@ -318,22 +333,12 @@
                             <span class="update-progress-text" id="update-progress-text">Загрузка...</span>
                         </div>
                     </div>
-
-                    <!-- Переключатель канала -->
                     <div class="channel-switcher">
                         <button class="channel-btn active" data-channel="releases" id="ch-releases"><i class="fas fa-tag"></i> Релизы</button>
                         <button class="channel-btn" data-channel="commits" id="ch-commits"><i class="fas fa-code-commit"></i> Коммиты</button>
                     </div>
-
-                    <!-- Список релизов -->
-                    <div class="builds-list" id="releases-list">
-                        <div class="builds-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка релизов...</div>
-                    </div>
-
-                    <!-- Список коммитов -->
-                    <div class="builds-list" id="commits-list" style="display:none;">
-                        <div class="builds-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка коммитов...</div>
-                    </div>
+                    <div class="builds-list" id="releases-list"><div class="builds-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка релизов...</div></div>
+                    <div class="builds-list" id="commits-list" style="display:none;"><div class="builds-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка коммитов...</div></div>
                 </div>
             </div>
 
@@ -352,27 +357,19 @@
                         <div class="logs-actions">
                             <button class="btn-action btn-small" id="btn-copy-logs"><i class="fas fa-copy"></i> Копировать</button>
                             <button class="btn-action btn-small" id="btn-clear-logs"><i class="fas fa-trash"></i> Очистить</button>
-                            <label class="autoscroll-toggle">
-                                <input type="checkbox" id="log-autoscroll" checked>
-                                <span>Автопрокрутка</span>
-                            </label>
+                            <label class="autoscroll-toggle"><input type="checkbox" id="log-autoscroll" checked><span>Автопрокрутка</span></label>
                         </div>
                     </div>
                 </div>
                 <div class="logs-container" id="logs-container">
-                    <div class="log-empty" id="log-empty">
-                        <i class="fas fa-terminal"></i>
-                        <p>Логи появятся здесь при запуске игры</p>
-                    </div>
+                    <div class="log-empty" id="log-empty"><i class="fas fa-terminal"></i><p>Логи появятся здесь при запуске игры</p></div>
                     <div class="log-entries" id="log-entries"></div>
                 </div>
             </div>
 
             <!-- О КЛИЕНТЕ -->
             <div class="page" id="page-about">
-                <div class="page-header">
-                    <h2><i class="fas fa-info-circle"></i> О клиенте</h2>
-                </div>
+                <div class="page-header"><h2><i class="fas fa-info-circle"></i> О клиенте</h2></div>
                 <div class="about-content">
                     <div class="about-logo">
                         <div class="big-logo">C</div>
@@ -383,8 +380,7 @@
                         <div class="about-card">
                             <h3><i class="fas fa-shield-halved"></i> Конфиденциальность</h3>
                             <p>ChaosClient не собирает, не хранит и не передаёт никаких личных данных.
-                               Без телеметрии, без аналитики, без HWID.
-                               Все настройки хранятся локально.</p>
+                               Без телеметрии, без аналитики, без HWID.</p>
                         </div>
                         <div class="about-card">
                             <h3><i class="fas fa-code"></i> Технологии</h3>

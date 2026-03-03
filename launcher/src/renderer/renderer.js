@@ -300,7 +300,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 progressText.textContent = 'ChaosClient запущен!';
                 launchBtn.innerHTML = '<i class="fas fa-check"></i> <span>ЗАПУЩЕН</span>';
                 playSuccessSound();
-                // Показать монитор
+                // Запустить мониторинг игры
+                startGameMonitor();
 
             } else { throw new Error(result.error); }
         } catch (err) {
@@ -313,9 +314,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         setTimeout(() => {
             isLaunching = false; launchBtn.disabled = false;
-            gameLaunched = false;
-            launchBtn.classList.remove('launching');
-            launchBtn.innerHTML = '<i class="fas fa-play"></i> <span>ЗАПУСК</span> <div class="btn-glow"></div>';
+            if (!gameRunning) {
+                gameLaunched = false;
+                launchBtn.classList.remove('launching');
+                launchBtn.innerHTML = '<i class="fas fa-play"></i> <span>ИГРАТЬ</span> <div class="btn-glow"></div>';
+            }
             progressContainer.style.display = 'none'; progressFill.style.width = '0%'; progressFill.style.background = '';
         }, 5000);
     });
@@ -448,7 +451,96 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // ===== Загрузка новостей с GitHub =====
     loadNews();
-});
+
+    // ===== Быстрые действия =====
+    document.getElementById('qa-gamedir')?.addEventListener('click', () => {
+        launcher.openPath(gameDir.value || '');
+    });
+    document.getElementById('qa-settings')?.addEventListener('click', () => {
+        document.querySelector('.nav-btn[data-page="settings"]').click();
+    });
+    document.getElementById('qa-updates')?.addEventListener('click', () => {
+        document.querySelector('.nav-btn[data-page="devbuilds"]').click();
+    });
+    document.getElementById('qa-github')?.addEventListener('click', () => {
+        launcher.openExternal('https://github.com/TotalChaos01/ChaosClient');
+    });
+
+    // ===== Статистика на главной =====
+    try {
+        // Подсчёт модулей (hardcoded — кол-во модулей в клиенте)
+        document.getElementById('stat-mods').textContent = '25+';
+        // Подсчёт установленных модов
+        const selMods = await launcher.getSetting('selectedMods');
+        document.getElementById('stat-installed-mods').textContent = (selMods ? selMods.length + 1 : 1).toString(); // +1 for ChaosClient itself
+    } catch (e) { /* ignore */ }
+
+    // ===== Мониторинг процесса игры =====
+    let gameRunning = false;
+    let gameMonitorInterval = null;
+
+    function startGameMonitor() {
+        gameRunning = true;
+        updateGameStatus();
+        gameMonitorInterval = setInterval(async () => {
+            try {
+                const stats = await launcher.getProcessStats();
+                if (stats) {
+                    const uptime = formatUptime(stats.uptime);
+                    document.getElementById('game-status-text').textContent = 'Запущен';
+                    document.getElementById('game-uptime-label').textContent = `${uptime} • ${stats.memoryMB} МБ`;
+                    document.getElementById('game-status-dot').classList.add('running');
+                    document.getElementById('player-status-label').innerHTML = '<i class="fas fa-circle" style="color:var(--success); font-size: 8px; margin-right:4px;"></i> В игре';
+                } else {
+                    stopGameMonitor();
+                }
+            } catch (e) { stopGameMonitor(); }
+        }, 3000);
+    }
+
+    function stopGameMonitor() {
+        gameRunning = false;
+        if (gameMonitorInterval) { clearInterval(gameMonitorInterval); gameMonitorInterval = null; }
+        document.getElementById('game-status-text').textContent = 'Не запущен';
+        document.getElementById('game-uptime-label').textContent = 'Статус';
+        document.getElementById('game-status-dot').classList.remove('running');
+        document.getElementById('player-status-label').innerHTML = '<i class="fas fa-circle" style="color:var(--success); font-size: 8px; margin-right:4px;"></i> Готов к запуску';
+        // Reset launch button
+        const lb = document.getElementById('btn-launch');
+        lb.classList.remove('game-running');
+        lb.innerHTML = '<i class="fas fa-play"></i> <span>ИГРАТЬ</span> <div class="btn-glow"></div>';
+    }
+
+    function formatUptime(sec) {
+        if (sec < 60) return `${sec}с`;
+        if (sec < 3600) return `${Math.floor(sec/60)}м ${sec%60}с`;
+        const h = Math.floor(sec/3600);
+        const m = Math.floor((sec%3600)/60);
+        return `${h}ч ${m}м`;
+    }
+
+    function updateGameStatus() {
+        if (gameRunning) {
+            document.getElementById('game-status-text').textContent = 'Запущен';
+            document.getElementById('game-status-dot').classList.add('running');
+            const lb = document.getElementById('btn-launch');
+            lb.classList.add('game-running');
+            lb.innerHTML = '<i class="fas fa-gamepad"></i> <span>ЗАПУЩЕНО</span>';
+        }
+    }
+
+    // Hook into game exit
+    launcher.onGameExit((data) => {
+        const ts = new Date().toLocaleTimeString('ru-RU', { hour12: false });
+        if (data.code !== null) {
+            addLogEntry({ time: ts, level: data.code === 0 ? 'info' : 'error', message: `━━━ Minecraft завершился с кодом ${data.code} ━━━` });
+        } else {
+            addLogEntry({ time: ts, level: 'warn', message: `━━━ Minecraft завершился сигналом ${data.signal} ━━━` });
+        }
+        stopGameMonitor();
+    });
+
+}); // end DOMContentLoaded
 
 // ===== Утилиты =====
 function escapeHtml(text) {
