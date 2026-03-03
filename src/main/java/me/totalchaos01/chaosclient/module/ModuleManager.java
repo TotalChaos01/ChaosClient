@@ -7,6 +7,7 @@ import me.totalchaos01.chaosclient.module.impl.render.*;
 import me.totalchaos01.chaosclient.module.impl.ghost.*;
 import me.totalchaos01.chaosclient.module.impl.exploits.*;
 import me.totalchaos01.chaosclient.module.impl.other.*;
+import me.totalchaos01.chaosclient.module.impl.other.BaritoneModule;
 import me.totalchaos01.chaosclient.setting.Setting;
 
 import java.util.ArrayList;
@@ -30,6 +31,13 @@ public class ModuleManager {
         register(new AutoShield());
         register(new AutoBlocking());
         register(new AutoGapple());
+        register(new AutoCrystal());
+        register(new Surround());
+        register(new HoleFiller());
+        register(new AutoTrap());
+        register(new Burrow());
+        register(new BowSpam());
+        register(new AutoMending());
 
         // Movement
         register(new Sprint());
@@ -40,6 +48,14 @@ public class ModuleManager {
         register(new Jesus());
         register(new SafeWalk());
         register(new NoFall());
+        register(new ElytraFly());
+        register(new ReverseStep());
+        register(new LongJump());
+        register(new Phase());
+        register(new BoatFly());
+        register(new AutoWalk());
+        register(new AntiAnvil());
+        register(new Anchor());
 
         // Player
         register(new AutoTool());
@@ -49,6 +65,21 @@ public class ModuleManager {
         register(new Blink());
         register(new Zoom());
         register(new NoDelay());
+        register(new NoRotate());
+        register(new AutoRespawn());
+        register(new AutoArmor());
+        register(new AntiHunger());
+        register(new AutoReplenish());
+        register(new ChestSwap());
+        register(new AutoLog());
+        register(new FastUse());
+        register(new SpeedMine());
+        register(new AirPlace());
+        register(new PacketMine());
+        register(new FakePlayer());
+        register(new Notifier());
+        register(new AntiSpam());
+        register(new AutoEZ());
 
         // Legit
         register(new AimAssist());
@@ -67,12 +98,31 @@ public class ModuleManager {
         register(new NoWeather());
         register(new TargetHUD());
         register(new HUDEditor());
+        register(new Freecam());
+        register(new HoleESP());
+        register(new StorageESP());
+        register(new Ambience());
+        register(new HandView());
+        register(new LogoutSpots());
+        register(new NewChunks());
+        register(new Chams());
+        register(new XRAY());
+        register(new PopRender());
 
         // Exploits
         register(new ServerCrasher());
         register(new Timer());
         register(new ClientSpoofer());
         register(new Disabler());
+        register(new PingSpoof());
+        register(new PortalGUI());
+        register(new MultiTask());
+        register(new InventoryWalk());
+        register(new AntiPistonPush());
+        register(new GodMode());
+
+        // Other
+        register(new BaritoneModule());
     }
 
     private void register(Module module) {

@@ -23,6 +23,7 @@ public class CommandManager {
         commands.add(new FriendCommand());
         commands.add(new ConfigCommand());
         commands.add(new VClipCommand());
+        commands.add(new BaritoneCommand());
     }
 
     public void handle(String input) {

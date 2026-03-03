@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "me.totalchaos01"
-version = "1.2.0"
+version = "1.3.0"
 
 val minecraftVersion = "1.21.11"
 val yarnMappings = "1.21.11+build.4"
@@ -15,6 +15,7 @@ repositories {
     mavenCentral()
     maven("https://maven.fabricmc.net/")
     maven("https://repo.viaversion.com")
+    flatDir { dirs("libs") }
 }
 
 dependencies {
@@ -25,6 +26,10 @@ dependencies {
 
     // JSON config
     implementation("com.google.code.gson:gson:2.11.0")
+
+    // Baritone — embedded pathfinding (jar-in-jar)
+    modImplementation("baritone:baritone-fabric:1.15.0")
+    include("baritone:baritone-fabric:1.15.0")
 }
 
 java {
