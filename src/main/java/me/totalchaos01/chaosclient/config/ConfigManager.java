@@ -7,6 +7,8 @@ import me.totalchaos01.chaosclient.setting.Setting;
 import me.totalchaos01.chaosclient.setting.impl.BooleanSetting;
 import me.totalchaos01.chaosclient.setting.impl.ModeSetting;
 import me.totalchaos01.chaosclient.setting.impl.NumberSetting;
+import me.totalchaos01.chaosclient.ui.clickgui.ClickGuiScreen;
+import me.totalchaos01.chaosclient.util.render.ThemeUtil;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -55,6 +57,17 @@ public class ConfigManager {
             }
 
             root.add("modules", modules);
+
+            // Save GUI theme settings
+            JsonObject gui = new JsonObject();
+            gui.addProperty("theme", ThemeUtil.getTheme());
+            gui.addProperty("gradientSpeed", ClickGuiScreen.getGradientSpeed());
+            gui.addProperty("glowIntensity", ClickGuiScreen.getGlowIntensity());
+            gui.addProperty("darkMode", ClickGuiScreen.isDarkMode());
+            gui.addProperty("shadowEnabled", ClickGuiScreen.isShadowEnabled());
+            gui.addProperty("glowEnabled", ClickGuiScreen.isGlowEnabled());
+            root.add("gui", gui);
+
             Files.writeString(configFile, GSON.toJson(root));
             ChaosClient.LOGGER.info("Config saved to {}", configFile);
         } catch (IOException e) {
@@ -74,6 +87,17 @@ public class ConfigManager {
 
             if (!root.has("modules")) return;
             JsonObject modules = root.getAsJsonObject("modules");
+
+            // Load GUI theme settings
+            if (root.has("gui")) {
+                JsonObject gui = root.getAsJsonObject("gui");
+                if (gui.has("theme")) ThemeUtil.setTheme(gui.get("theme").getAsString());
+                if (gui.has("gradientSpeed")) ClickGuiScreen.setGradientSpeed(gui.get("gradientSpeed").getAsFloat());
+                if (gui.has("glowIntensity")) ClickGuiScreen.setGlowIntensity(gui.get("glowIntensity").getAsFloat());
+                if (gui.has("darkMode")) ClickGuiScreen.setDarkMode(gui.get("darkMode").getAsBoolean());
+                if (gui.has("shadowEnabled")) ClickGuiScreen.setShadowEnabled(gui.get("shadowEnabled").getAsBoolean());
+                if (gui.has("glowEnabled")) ClickGuiScreen.setGlowEnabled(gui.get("glowEnabled").getAsBoolean());
+            }
 
             for (Module module : ChaosClient.getInstance().getModuleManager().getModules()) {
                 if (!modules.has(module.getName())) continue;

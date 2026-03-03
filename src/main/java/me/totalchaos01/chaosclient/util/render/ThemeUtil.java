@@ -1,7 +1,6 @@
 package me.totalchaos01.chaosclient.util.render;
 
 import me.totalchaos01.chaosclient.ChaosClient;
-import me.totalchaos01.chaosclient.module.Module;
 import me.totalchaos01.chaosclient.setting.Setting;
 import me.totalchaos01.chaosclient.setting.impl.ModeSetting;
 
@@ -44,6 +43,16 @@ public final class ThemeUtil {
 
     public static void setTheme(String theme) {
         currentTheme = theme;
+        lastUpdate = System.currentTimeMillis(); // prevent getTheme() from overwriting immediately
+        // Also update the HUD module's "Theme" ModeSetting so it stays in sync
+        try {
+            if (ChaosClient.getInstance() != null && ChaosClient.getInstance().getModuleManager() != null) {
+                Setting setting = ChaosClient.getInstance().getModuleManager().getSetting("HUD", "Theme");
+                if (setting instanceof ModeSetting ms) {
+                    ms.setMode(theme);
+                }
+            }
+        } catch (Exception ignored) {}
     }
 
     // ─── Primary API ──────────────────────────────────────────

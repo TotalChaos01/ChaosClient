@@ -1,6 +1,7 @@
 package me.totalchaos01.chaosclient.ui.mainmenu;
 
 import me.totalchaos01.chaosclient.ChaosClient;
+import me.totalchaos01.chaosclient.ui.clickgui.ClickGuiScreen;
 import me.totalchaos01.chaosclient.util.render.Animate;
 import me.totalchaos01.chaosclient.util.render.ColorUtil;
 import me.totalchaos01.chaosclient.util.render.RenderUtil;
@@ -17,174 +18,242 @@ import net.minecraft.text.Text;
 import java.awt.*;
 
 /**
- * Rise-style Main Menu for ChaosClient.
- * Features: dark background, centered client logo, rounded buttons (Singleplayer, Multiplayer, Settings),
- * theme selector at bottom, hover animations.
- *
- * Ported from Rise Client's MainMenu.java (470 lines).
+ * ChaosClient Main Menu — Rise-style with settings panel,
+ * theme selector, fade/transparency effects. Russian UI.
  */
 public class ChaosMainMenu extends Screen {
 
-    // Button hover animation states
+    // Button hover animations
     private float singleHover = 0, multiHover = 0, settingsHover = 0, quitHover = 0;
 
-    // Theme selector
-    private final String[] themes = ThemeUtil.getThemeNames();
-    private int selectedThemeIdx = 0;
-    private float themeScrollX = 0;
+    // Settings panel
+    private boolean settingsPanelOpen = false;
+    private final Animate settingsPanelAnim = new Animate(0, 0.10);
+    private float themeScrollY = 0;
 
-    // Easter egg
-    private final boolean isRice = Math.random() < 0.01; // 1% chance like Rise
+    // Fade-in animation
+    private long openTime;
+    private final Animate fadeAnim = new Animate(0, 0.06);
+
+    // Ambient background animation
+    private float bgPhase = 0;
 
     public ChaosMainMenu() {
-        super(Text.literal("ChaosClient Main Menu"));
+        super(Text.literal("ChaosClient"));
     }
 
     @Override
     protected void init() {
         super.init();
-        // Find current theme index
-        String currentTheme = ThemeUtil.getTheme();
-        for (int i = 0; i < themes.length; i++) {
-            if (themes[i].equals(currentTheme)) {
-                selectedThemeIdx = i;
-                break;
-            }
-        }
+        settingsPanelOpen = false;
+        settingsPanelAnim.reset(0);
+        themeScrollY = 0;
+        openTime = System.currentTimeMillis();
+        fadeAnim.setValue(0);
+        fadeAnim.setTarget(1);
     }
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
-        // ─── Dark background with subtle gradient ─────────────
+        fadeAnim.update();
+        settingsPanelAnim.setTarget(settingsPanelOpen ? 1 : 0);
+        settingsPanelAnim.update();
+        float fade = (float) fadeAnim.getValue();
+        bgPhase += delta * 0.3f;
+
+        // Dark background
         ctx.fill(0, 0, width, height, 0xFF0D0D12);
 
-        // Subtle radial gradient effect (Rise used panorama, we use gradient)
-        Color themeColor = ThemeUtil.getThemeColor(ThemeType.LOGO);
-        int gradientColor = ColorUtil.withAlpha(ColorUtil.toARGB(themeColor), 15);
-        RenderUtil.gradientRect(ctx, 0, 0, width, height / 2.0, gradientColor, 0x00000000);
-        RenderUtil.gradientRect(ctx, 0, height / 2.0, width, height / 2.0, 0x00000000, gradientColor);
+        // Animated ambient gradient
+        Color themeColor = ThemeUtil.getThemeColor(bgPhase, ThemeType.LOGO, 0.5f);
+        Color themeColor2 = ThemeUtil.getThemeColor(bgPhase + 3, ThemeType.LOGO, 0.5f);
+        int g1 = ColorUtil.withAlpha(ColorUtil.toARGB(themeColor), (int) (12 * fade));
+        int g2 = ColorUtil.withAlpha(ColorUtil.toARGB(themeColor2), (int) (8 * fade));
 
-        // ─── Client Logo (large, centered) ────────────────────
-        String logoText = isRice ? "RiceClient" : ChaosClient.CLIENT_NAME;
-        int logoColor = ColorUtil.toARGB(ThemeUtil.getThemeColor(0, ThemeType.LOGO, 1));
+        // Top gradient (theme glow)
+        RenderUtil.gradientRect(ctx, 0, 0, width, height * 0.5, g1, 0x00000000);
+        // Bottom gradient
+        RenderUtil.gradientRect(ctx, 0, height * 0.5, width, height * 0.5, 0x00000000, g2);
+        // Side vignette
+        RenderUtil.gradientRect(ctx, 0, 0, width * 0.15, height, 0x40000000, 0x00000000);
+        RenderUtil.gradientRect(ctx, width * 0.85, 0, width * 0.15, height, 0x00000000, 0x40000000);
+
+        // Logo with fade
+        int logoAlpha = (int) (255 * fade);
+        String logoText = ChaosClient.CLIENT_NAME;
+        int logoColor = ColorUtil.withAlpha(ColorUtil.toARGB(ThemeUtil.getThemeColor(0, ThemeType.LOGO, 1)), logoAlpha);
 
         ctx.getMatrices().pushMatrix();
         float scale = 5.0f;
         int logoW = client.textRenderer.getWidth(logoText);
         float logoX = (width / 2f - logoW * scale / 2f) / scale;
-        float logoY = (height * 0.22f) / scale;
+        float logoY = (height * 0.18f) / scale;
         ctx.getMatrices().scale(scale, scale);
         ctx.drawTextWithShadow(client.textRenderer, logoText, (int) logoX, (int) logoY, logoColor);
         ctx.getMatrices().popMatrix();
 
-        // Version text below logo
+        // Version under logo
         String version = "v" + ChaosClient.CLIENT_VERSION;
         int vw = client.textRenderer.getWidth(version);
-        ctx.drawTextWithShadow(client.textRenderer, version, width / 2 - vw / 2, (int) (height * 0.22f + scale * 10 + 8), 0x80FFFFFF);
+        ctx.drawTextWithShadow(client.textRenderer, version, width / 2 - vw / 2,
+                (int) (height * 0.18f + scale * 10 + 8), ColorUtil.withAlpha(0xFFFFFFFF, (int) (128 * fade)));
 
-        // ─── Buttons ──────────────────────────────────────────
-        float buttonWidth = 200;
-        float buttonHeight = 28;
+        // Subtitle
+        String subtitle = "\u0423\u043D\u0438\u0432\u0435\u0440\u0441\u0430\u043B\u044C\u043D\u044B\u0439 \u043A\u043B\u0438\u0435\u043D\u0442 Minecraft";
+        int sw = client.textRenderer.getWidth(subtitle);
+        ctx.drawTextWithShadow(client.textRenderer, subtitle, width / 2 - sw / 2,
+                (int) (height * 0.18f + scale * 10 + 20), ColorUtil.withAlpha(0xFFAAAAAA, (int) (200 * fade)));
+
+        // Buttons (with fade-in stagger)
+        float buttonWidth = 210;
+        float buttonHeight = 32;
         float buttonX = width / 2f - buttonWidth / 2f;
-        float buttonStartY = height * 0.45f;
-        float buttonGap = 36;
+        float buttonStartY = height * 0.42f;
+        float buttonGap = 40;
 
-        // Update hover animations
         singleHover = (float) Animate.lerp(singleHover, isInButton(mouseX, mouseY, buttonX, buttonStartY, buttonWidth, buttonHeight) ? 1 : 0, 0.2);
         multiHover = (float) Animate.lerp(multiHover, isInButton(mouseX, mouseY, buttonX, buttonStartY + buttonGap, buttonWidth, buttonHeight) ? 1 : 0, 0.2);
         settingsHover = (float) Animate.lerp(settingsHover, isInButton(mouseX, mouseY, buttonX, buttonStartY + buttonGap * 2, buttonWidth, buttonHeight) ? 1 : 0, 0.2);
         quitHover = (float) Animate.lerp(quitHover, isInButton(mouseX, mouseY, buttonX, buttonStartY + buttonGap * 3, buttonWidth, buttonHeight) ? 1 : 0, 0.2);
 
-        drawButton(ctx, "Singleplayer", buttonX, buttonStartY, buttonWidth, buttonHeight, singleHover, themeColor);
-        drawButton(ctx, "Multiplayer", buttonX, buttonStartY + buttonGap, buttonWidth, buttonHeight, multiHover, themeColor);
-        drawButton(ctx, "Settings", buttonX, buttonStartY + buttonGap * 2, buttonWidth, buttonHeight, settingsHover, themeColor);
-        drawButton(ctx, "Quit", buttonX, buttonStartY + buttonGap * 3, buttonWidth, buttonHeight, quitHover, themeColor);
+        // Staggered fade for each button
+        float t1 = Math.min(1, (float) (System.currentTimeMillis() - openTime - 100) / 400);
+        float t2 = Math.min(1, (float) (System.currentTimeMillis() - openTime - 200) / 400);
+        float t3 = Math.min(1, (float) (System.currentTimeMillis() - openTime - 300) / 400);
+        float t4 = Math.min(1, (float) (System.currentTimeMillis() - openTime - 400) / 400);
 
-        // ─── Theme Selector (bottom bar) ──────────────────────
-        renderThemeSelector(ctx, mouseX, mouseY);
+        if (t1 > 0) drawButton(ctx, "\u041E\u0434\u0438\u043D\u043E\u0447\u043D\u0430\u044F \u0438\u0433\u0440\u0430", buttonX, buttonStartY, buttonWidth, buttonHeight, singleHover, themeColor, t1);
+        if (t2 > 0) drawButton(ctx, "\u041C\u0443\u043B\u044C\u0442\u0438\u043F\u043B\u0435\u0435\u0440", buttonX, buttonStartY + buttonGap, buttonWidth, buttonHeight, multiHover, themeColor, t2);
+        if (t3 > 0) drawButton(ctx, "\u2699 \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043A\u043B\u0438\u0435\u043D\u0442\u0430", buttonX, buttonStartY + buttonGap * 2, buttonWidth, buttonHeight, settingsHover, themeColor, t3);
+        if (t4 > 0) drawButton(ctx, "\u0412\u044B\u0445\u043E\u0434", buttonX, buttonStartY + buttonGap * 3, buttonWidth, buttonHeight, quitHover, themeColor, t4);
 
-        // ─── Bottom credits ───────────────────────────────────
-        ctx.drawTextWithShadow(client.textRenderer, "ChaosClient " + ChaosClient.CLIENT_VERSION + " • Fabric 1.21.11", 4, height - 12, 0x60FFFFFF);
+        // Settings panel (slides from right)
+        if (settingsPanelAnim.getValue() > 0.01) {
+            renderSettingsPanel(ctx, mouseX, mouseY);
+        }
+
+        // Bottom credits
+        ctx.drawTextWithShadow(client.textRenderer,
+                "ChaosClient " + ChaosClient.CLIENT_VERSION + " \u2022 Fabric 1.21.11",
+                4, height - 12, ColorUtil.withAlpha(0xFFFFFFFF, (int) (96 * fade)));
+
+        // Hint text bottom-right
+        ctx.drawTextWithShadow(client.textRenderer,
+                "\u041F\u041A\u041C \u2014 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043A\u043B\u0438\u0435\u043D\u0442\u0430",
+                width - client.textRenderer.getWidth("\u041F\u041A\u041C \u2014 \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043A\u043B\u0438\u0435\u043D\u0442\u0430") - 4,
+                height - 12, ColorUtil.withAlpha(0xFFFFFFFF, (int) (48 * fade)));
     }
 
-    // ─── Button drawing ───────────────────────────────────────
-
-    private void drawButton(DrawContext ctx, String text, float x, float y, float w, float h, float hover, Color themeColor) {
-        // Background — gets brighter on hover
-        int alpha = (int) (40 + hover * 50);
+    private void drawButton(DrawContext ctx, String text, float x, float y, float w, float h,
+                            float hover, Color themeColor, float fadeIn) {
+        int alpha = (int) ((35 + hover * 55) * fadeIn);
         int bgColor = ColorUtil.withAlpha(ColorUtil.toARGB(themeColor), alpha);
-
-        // Border color interpolation
-        int borderAlpha = (int) (60 + hover * 130);
+        int borderAlpha = (int) ((50 + hover * 140) * fadeIn);
         int borderColor = ColorUtil.withAlpha(ColorUtil.toARGB(themeColor), borderAlpha);
 
-        // Draw rounded rect
-        RenderUtil.roundedRectSimple(ctx, (int) x, (int) y, (int) w, (int) h, 8, bgColor);
+        // Slight Y offset for slide-in effect
+        float offsetY = (1 - fadeIn) * 15;
 
-        // Border outline
-        RenderUtil.rectOutline(ctx, x, y, w, h, 1, borderColor);
+        RenderUtil.roundedRectSimple(ctx, (int) x, (int) (y + offsetY), (int) w, (int) h, 10, bgColor);
+        RenderUtil.roundedRectOutline(ctx, (int) x, (int) (y + offsetY), (int) w, (int) h, 10, 1, borderColor);
 
-        // Text centered
-        int textColor = ColorUtil.interpolateColor(0xAAFFFFFF, 0xFFFFFFFF, hover);
-        RenderUtil.drawCenteredText(ctx, text, (int) (x + w / 2), (int) (y + h / 2 - 4), textColor);
+        int textColor = ColorUtil.withAlpha(ColorUtil.interpolateColor(0xAAFFFFFF, 0xFFFFFFFF, hover), (int) (255 * fadeIn));
+        RenderUtil.drawCenteredText(ctx, text, (int) (x + w / 2), (int) (y + offsetY + h / 2 - 4), textColor);
     }
 
-    // ─── Theme Selector ───────────────────────────────────────
+    // --- Settings panel ---
 
-    private void renderThemeSelector(DrawContext ctx, int mouseX, int mouseY) {
-        float selectorY = height - 35;
-        float selectorH = 18;
-        float totalW = 0;
+    private void renderSettingsPanel(DrawContext ctx, int mouseX, int mouseY) {
+        float anim = (float) settingsPanelAnim.getValue();
+        int panelW = 240;
+        int panelH = 340;
+        float panelX = width - panelW * anim - 10 + panelW * (1 - anim);
+        float panelY = height / 2f - panelH / 2f;
 
-        // Calculate total width
-        for (String theme : themes) {
-            totalW += client.textRenderer.getWidth(theme) + 16;
-        }
+        // Panel shadow + background
+        RenderUtil.shadow(ctx, panelX, panelY, panelW, panelH, 14, 0xFF000000);
+        RenderUtil.roundedRectSimple(ctx, (int) panelX, (int) panelY, panelW, panelH, 14, 0xEE101218);
 
-        // Scroll target
-        float targetScrollX = width / 2f;
-        float consumed = 0;
-        for (int i = 0; i < selectedThemeIdx; i++) {
-            consumed += client.textRenderer.getWidth(themes[i]) + 16;
-        }
-        targetScrollX -= consumed + (client.textRenderer.getWidth(themes[selectedThemeIdx]) + 16) / 2f;
-        themeScrollX = (float) Animate.lerp(themeScrollX, targetScrollX, 0.1);
+        // Header
+        ctx.drawTextWithShadow(client.textRenderer, "\u2699 \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438",
+                (int) panelX + 14, (int) panelY + 10, 0xFFEEEEFF);
+        RenderUtil.gradientLine(ctx, (int) panelX + 12, (int) panelY + 22, panelW - 24, 1,
+                ColorUtil.toARGB(ThemeUtil.getThemeColor(ThemeType.GENERAL)),
+                ColorUtil.toARGB(ThemeUtil.getThemeColor(5, ThemeType.GENERAL)));
 
-        // Render themes
-        float drawX = themeScrollX;
+        int itemY = (int) panelY + 32;
+        int itemH = 28;
+
+        // Action buttons
+        // 1. Open GUI
+        boolean guiHover = mouseX >= panelX + 12 && mouseX <= panelX + panelW - 12 &&
+                mouseY >= itemY && mouseY < itemY + itemH;
+        RenderUtil.roundedRectSimple(ctx, (int) panelX + 12, itemY, panelW - 24, itemH - 2, 8,
+                guiHover ? 0x30FFFFFF : 0x15FFFFFF);
+        ctx.drawTextWithShadow(client.textRenderer, "\u25C9 \u041E\u0442\u043A\u0440\u044B\u0442\u044C ClickGUI",
+                (int) panelX + 22, itemY + 9, guiHover ? 0xFFFFFFFF : 0xFFBBCCDD);
+
+        itemY += itemH + 4;
+
+        // 2. MC Settings
+        boolean mcSettingsHover = mouseX >= panelX + 12 && mouseX <= panelX + panelW - 12 &&
+                mouseY >= itemY && mouseY < itemY + itemH;
+        RenderUtil.roundedRectSimple(ctx, (int) panelX + 12, itemY, panelW - 24, itemH - 2, 8,
+                mcSettingsHover ? 0x30FFFFFF : 0x15FFFFFF);
+        ctx.drawTextWithShadow(client.textRenderer, "\u2699 \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 MC",
+                (int) panelX + 22, itemY + 9, mcSettingsHover ? 0xFFFFFFFF : 0xFFBBCCDD);
+
+        itemY += itemH + 12;
+
+        // Theme section header
+        ctx.drawTextWithShadow(client.textRenderer, "\u25C9 \u0422\u0435\u043C\u044B",
+                (int) panelX + 14, itemY, 0xFF99AABB);
+        itemY += 14;
+
+        // Theme list (scrollable)
+        String[] themes = ThemeUtil.getThemeNames();
+        String current = ThemeUtil.getTheme();
+        int listH = panelH - (itemY - (int) panelY) - 10;
+
+        ctx.enableScissor((int) panelX + 10, itemY, (int) panelX + panelW - 10, itemY + listH);
+
+        float drawY = itemY + themeScrollY;
+        int themeItemH = 22;
         for (int i = 0; i < themes.length; i++) {
-            String theme = themes[i];
-            int tw = client.textRenderer.getWidth(theme);
-            float itemW = tw + 14;
+            boolean selected = themes[i].equals(current);
+            boolean hovered = mouseX >= panelX + 12 && mouseX <= panelX + panelW - 12 &&
+                    mouseY >= drawY && mouseY < drawY + themeItemH;
 
-            boolean selected = (i == selectedThemeIdx);
-            boolean hovered = mouseX >= drawX && mouseX <= drawX + itemW &&
-                    mouseY >= selectorY && mouseY <= selectorY + selectorH;
+            if (selected) {
+                int accent = ColorUtil.toARGB(ThemeUtil.getThemeColor(ThemeType.GENERAL));
+                RenderUtil.roundedRectSimple(ctx, (int) panelX + 12, (int) drawY,
+                        panelW - 24, themeItemH - 2, 7, ColorUtil.withAlpha(accent, 80));
+            } else if (hovered) {
+                RenderUtil.roundedRectSimple(ctx, (int) panelX + 12, (int) drawY,
+                        panelW - 24, themeItemH - 2, 7, 0x20FFFFFF);
+            }
 
-            // Background
-            int bgAlpha = selected ? 100 : (hovered ? 50 : 20);
-            Color themeColor = ThemeUtil.getThemeColor(ThemeType.GENERAL);
-            int bg = ColorUtil.withAlpha(ColorUtil.toARGB(themeColor), bgAlpha);
-            RenderUtil.roundedRectSimple(ctx, (int) drawX, (int) selectorY, (int) itemW, (int) selectorH, 4, bg);
-
-            // Text
-            int textColor = selected ? 0xFFFFFFFF : 0x90FFFFFF;
-            ctx.drawTextWithShadow(client.textRenderer, theme, (int) (drawX + 7), (int) (selectorY + 5), textColor);
-
-            drawX += itemW + 2;
+            int textColor = selected ? 0xFFFFFFFF : 0xFFBBCCDD;
+            ctx.drawTextWithShadow(client.textRenderer, themes[i],
+                    (int) panelX + 20, (int) drawY + 6, textColor);
+            drawY += themeItemH;
         }
+
+        ctx.disableScissor();
     }
 
-    // ─── Input ────────────────────────────────────────────────
+    // --- Input ---
 
     @Override
     public boolean mouseClicked(Click click, boolean bl) {
         double mouseX = click.x(), mouseY = click.y();
-        float buttonWidth = 200;
-        float buttonHeight = 28;
+        int button = click.button();
+
+        float buttonWidth = 210;
+        float buttonHeight = 32;
         float buttonX = width / 2f - buttonWidth / 2f;
-        float buttonStartY = height * 0.45f;
-        float buttonGap = 36;
+        float buttonStartY = height * 0.42f;
+        float buttonGap = 40;
 
         if (isInButton(mouseX, mouseY, buttonX, buttonStartY, buttonWidth, buttonHeight)) {
             client.setScreen(new SelectWorldScreen(this));
@@ -195,7 +264,7 @@ public class ChaosMainMenu extends Screen {
             return true;
         }
         if (isInButton(mouseX, mouseY, buttonX, buttonStartY + buttonGap * 2, buttonWidth, buttonHeight)) {
-            client.setScreen(new OptionsScreen(this, client.options));
+            settingsPanelOpen = !settingsPanelOpen;
             return true;
         }
         if (isInButton(mouseX, mouseY, buttonX, buttonStartY + buttonGap * 3, buttonWidth, buttonHeight)) {
@@ -203,22 +272,62 @@ public class ChaosMainMenu extends Screen {
             return true;
         }
 
-        // Theme selector clicks
-        float selectorY = height - 35;
-        float selectorH = 18;
-        float drawX = themeScrollX;
-        for (int i = 0; i < themes.length; i++) {
-            float itemW = client.textRenderer.getWidth(themes[i]) + 14;
-            if (mouseX >= drawX && mouseX <= drawX + itemW &&
-                    mouseY >= selectorY && mouseY <= selectorY + selectorH) {
-                selectedThemeIdx = i;
-                ThemeUtil.setTheme(themes[i]);
+        // Settings panel clicks
+        if (settingsPanelOpen && settingsPanelAnim.getValue() > 0.5) {
+            float anim = (float) settingsPanelAnim.getValue();
+            int panelW = 240;
+            int panelH = 340;
+            float panelXPos = width - panelW * anim - 10 + panelW * (1 - anim);
+            float panelYPos = height / 2f - panelH / 2f;
+
+            int itemYPos = (int) panelYPos + 32;
+            int itemH = 28;
+
+            // Open GUI button
+            if (mouseX >= panelXPos + 12 && mouseX <= panelXPos + panelW - 12 &&
+                    mouseY >= itemYPos && mouseY < itemYPos + itemH) {
+                client.setScreen(new ClickGuiScreen());
                 return true;
             }
-            drawX += itemW + 2;
+
+            itemYPos += itemH + 4;
+
+            // MC Settings button
+            if (mouseX >= panelXPos + 12 && mouseX <= panelXPos + panelW - 12 &&
+                    mouseY >= itemYPos && mouseY < itemYPos + itemH) {
+                client.setScreen(new OptionsScreen(this, client.options));
+                return true;
+            }
+
+            itemYPos += itemH + 12 + 14;
+
+            // Theme list clicks
+            String[] themes = ThemeUtil.getThemeNames();
+            int themeItemH = 22;
+            float drawY = itemYPos + themeScrollY;
+            for (int i = 0; i < themes.length; i++) {
+                if (mouseX >= panelXPos + 12 && mouseX <= panelXPos + panelW - 12 &&
+                        mouseY >= drawY && mouseY < drawY + themeItemH) {
+                    ThemeUtil.setTheme(themes[i]);
+                    return true;
+                }
+                drawY += themeItemH;
+            }
         }
 
         return super.mouseClicked(click, bl);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double hAmount, double vAmount) {
+        if (settingsPanelOpen) {
+            themeScrollY += (float) (vAmount * 20);
+            if (themeScrollY > 0) themeScrollY = 0;
+            float maxScroll = -(ThemeUtil.getThemeNames().length * 22 - 200);
+            if (themeScrollY < maxScroll) themeScrollY = maxScroll;
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, hAmount, vAmount);
     }
 
     private boolean isInButton(double mx, double my, double bx, double by, double bw, double bh) {
@@ -226,7 +335,5 @@ public class ChaosMainMenu extends Screen {
     }
 
     @Override
-    public boolean shouldCloseOnEsc() {
-        return false;
-    }
+    public boolean shouldCloseOnEsc() { return false; }
 }

@@ -16,6 +16,7 @@ import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
+import org.lwjgl.glfw.GLFW;
 
 import java.awt.*;
 import java.util.HashMap;
@@ -23,55 +24,48 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Rise-style ClickGUI — complete visual overhaul.
- * Features: animated category selector, gradient accents, glow effects,
- * iOS-style toggle switches, gradient sliders, theme customization panel,
- * smooth pop-in animation, dark/transparent mode, Rise-quality shadow.
+ * Redesigned ClickGUI — smooth rounded UI with theme panel as sidebar tab,
+ * player profile in bottom-left, middle-click keybind, right-click settings.
+ * All UI in Russian.
  */
 public class ClickGuiScreen extends Screen {
 
-    // ─── Layout constants ─────────────────────────────────────
-    private static final int CAT_WIDTH = 95;
-    private static final int CAT_HEIGHT = 24;
-    private static final int HEADER_H = 28;
-    private static final int MODULE_H = 26;
-    private static final int SETTING_H = 20;
-    private static final int PAD = 6;
+    // --- Layout ---
+    private static final int CAT_WIDTH = 110;
+    private static final int CAT_HEIGHT = 26;
+    private static final int HEADER_H = 30;
+    private static final int MODULE_H = 28;
+    private static final int SETTING_H = 22;
+    private static final int PAD = 8;
+    private static final int PROFILE_H = 44;
 
-    // ─── Tabs ─────────────────────────────────────────────────
-    private enum Tab { MODULES, THEMES }
-    private Tab currentTab = Tab.MODULES;
-
-    // ─── Window state (persists) ──────────────────────────────
+    // --- Window ---
     private float winX = -1, winY = -1;
-    private float winW = 500, winH = 360;
+    private float winW = 540, winH = 400;
 
-    // ─── Animations ───────────────────────────────────────────
-    private float popScale = 0.85f;
+    // --- Animations ---
     private float renderSelectY = 0;
     private float scrollOffset = 0;
-    private float themeScrollOffset = 0;
+    private float themeScrollY = 0;
     private final Animate openAnim = new Animate(0.85, 0.08);
-    private final Map<Module, Animate> moduleAnimX = new HashMap<>();
-    private final Map<Module, Animate> moduleAnimAlpha = new HashMap<>();
     private final Map<String, Animate> toggleAnims = new HashMap<>();
     private final Map<String, Animate> sliderAnims = new HashMap<>();
-    private float tabIndicatorX = 0;
 
-    // ─── State ────────────────────────────────────────────────
+    // --- State ---
+    private enum SidebarTab { MODULES, THEMES }
+    private SidebarTab activeTab = SidebarTab.MODULES;
     private Category selectedCat = Category.COMBAT;
     private final Map<Module, Boolean> expandedModules = new HashMap<>();
     private boolean dragging = false;
     private float dragOffX, dragOffY;
     private NumberSetting draggingSlider = null;
-    private float sliderLeft, sliderWidth;
     private long openTime;
+    private Module bindingModule = null;
 
-    // ─── Colors (computed from theme) ─────────────────────────
-    private int colorBg, colorSidebar, colorHeader, colorAccent, colorAccentDark;
-    private int colorAccent2; // secondary gradient color
+    // --- Colors ---
+    private int colorBg, colorSidebar, colorHeader, colorAccent, colorAccent2;
 
-    // ─── Category icons ───────────────────────────────────────
+    // --- Category icons ---
     private static final Map<Category, String> ICONS = Map.of(
             Category.COMBAT, "\u2694",
             Category.MOVEMENT, "\u27A4",
@@ -81,23 +75,26 @@ public class ClickGuiScreen extends Screen {
             Category.OTHER, "\u2699"
     );
 
-    // ─── Theme customization settings (integrated here) ───────
-    // These are persisted as settings on the ClickGui module but managed here
+    // --- Russian category names ---
+    private static final Map<Category, String> RU_NAMES = Map.of(
+            Category.COMBAT, "\u0411\u043E\u0439",
+            Category.MOVEMENT, "\u0414\u0432\u0438\u0436\u0435\u043D\u0438\u0435",
+            Category.PLAYER, "\u0418\u0433\u0440\u043E\u043A",
+            Category.RENDER, "\u0412\u0438\u0437\u0443\u0430\u043B",
+            Category.GHOST, "\u0413\u043E\u0441\u0442",
+            Category.OTHER, "\u0414\u0440\u0443\u0433\u043E\u0435"
+    );
+
+    // --- Persisted theme settings ---
     private static float gradientSpeed = 1.0f;
-    private static float pulseFrequency = 1.0f;
     private static float glowIntensity = 1.0f;
     private static boolean darkMode = true;
     private static boolean shadowEnabled = true;
     private static boolean glowEnabled = true;
-    private static int selectedThemeIndex = 0;
 
     public ClickGuiScreen() {
         super(Text.literal("ChaosClient"));
     }
-
-    // ═══════════════════════════════════════════════════════════
-    //  INIT
-    // ═══════════════════════════════════════════════════════════
 
     @Override
     protected void init() {
@@ -106,38 +103,36 @@ public class ClickGuiScreen extends Screen {
         openAnim.setTarget(1.0);
         dragging = false;
         draggingSlider = null;
+        bindingModule = null;
         openTime = System.currentTimeMillis();
 
         if (winX < 0 || winY < 0) {
             winX = this.width / 2f - winW / 2f;
             winY = this.height / 2f - winH / 2f;
         }
-
         updateColors();
     }
 
     private void updateColors() {
         Color theme = ThemeUtil.getThemeColor(0, ThemeType.GENERAL, gradientSpeed);
         Color theme2 = ThemeUtil.getThemeColor(5, ThemeType.GENERAL, gradientSpeed);
-
         colorAccent = ColorUtil.toARGB(theme);
         colorAccent2 = ColorUtil.toARGB(theme2);
-        colorAccentDark = ColorUtil.toARGB(ColorUtil.darker(theme, 0.6));
 
         if (darkMode) {
-            colorBg = 0xFF171A21;
-            colorSidebar = 0xFF121419;
-            colorHeader = 0xFF171A21;
+            colorBg = 0xFF141620;
+            colorSidebar = 0xFF0F1118;
+            colorHeader = 0xFF141620;
         } else {
-            colorBg = 0xFF272A30;
-            colorSidebar = 0xFF26272C;
-            colorHeader = 0xFF272A30;
+            colorBg = 0xFF24262E;
+            colorSidebar = 0xFF1E2028;
+            colorHeader = 0xFF24262E;
         }
     }
 
-    // ═══════════════════════════════════════════════════════════
+    // ============================================================
     //  RENDER
-    // ═══════════════════════════════════════════════════════════
+    // ============================================================
 
     @Override
     public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
@@ -145,148 +140,166 @@ public class ClickGuiScreen extends Screen {
         openAnim.update();
         float scale = (float) openAnim.getValue();
 
-        // ── Dark overlay ──────────────────────────────────────
         int overlayAlpha = (int) (0x70 * Math.min(1.0, (System.currentTimeMillis() - openTime) / 300.0));
         ctx.fill(0, 0, this.width, this.height, (overlayAlpha << 24));
 
         ctx.getMatrices().pushMatrix();
-
-        // Scale from center
         float cx = winX + winW / 2f, cy = winY + winH / 2f;
         ctx.getMatrices().translate(cx, cy);
         ctx.getMatrices().scale(scale, scale);
         ctx.getMatrices().translate(-cx, -cy);
 
-        // ── Shadow ────────────────────────────────────────────
         if (shadowEnabled) {
-            RenderUtil.shadow(ctx, winX, winY, winW, winH, 12, 0xFF000000, 14, 2.5);
+            RenderUtil.shadow(ctx, winX, winY, winW, winH, 14, 0xFF000000);
         }
 
-        // ── Accent glow behind window ─────────────────────────
         if (glowEnabled) {
-            Color glowCol = new Color((colorAccent >> 16) & 0xFF, (colorAccent >> 8) & 0xFF,
-                    colorAccent & 0xFF, 40);
-            RenderUtil.glow(ctx, winX, winY, winW, winH, 12, glowCol, (int)(6 * glowIntensity));
+            Color gc = new Color((colorAccent >> 16) & 0xFF, (colorAccent >> 8) & 0xFF,
+                    colorAccent & 0xFF, 35);
+            RenderUtil.glow(ctx, winX, winY, winW, winH, 14, gc, 3);
         }
 
-        // ── Sidebar background ────────────────────────────────
-        RenderUtil.roundedRectSimple(ctx, (int) winX, (int) winY, CAT_WIDTH, (int) winH, 12, colorSidebar);
-        ctx.fill((int) (winX + CAT_WIDTH - 12), (int) winY, (int) (winX + CAT_WIDTH), (int) (winY + winH), colorSidebar);
+        // Sidebar background
+        RenderUtil.roundedRectSimple(ctx, (int) winX, (int) winY, CAT_WIDTH, (int) winH, 14, colorSidebar);
+        ctx.fill((int) (winX + CAT_WIDTH - 14), (int) winY, (int) (winX + CAT_WIDTH), (int) (winY + winH), colorSidebar);
 
-        // ── Module area background ────────────────────────────
+        // Module area background
         RenderUtil.roundedRectSimple(ctx, (int) (winX + CAT_WIDTH), (int) winY,
-                (int) (winW - CAT_WIDTH), (int) winH, 12, colorBg);
+                (int) (winW - CAT_WIDTH), (int) winH, 14, colorBg);
         ctx.fill((int) (winX + CAT_WIDTH), (int) winY,
-                (int) (winX + CAT_WIDTH + 12), (int) (winY + winH), colorBg);
+                (int) (winX + CAT_WIDTH + 14), (int) (winY + winH), colorBg);
 
-        // ── Header ────────────────────────────────────────────
+        // Header background
         RenderUtil.roundedRectSimple(ctx, (int) (winX + CAT_WIDTH), (int) winY,
-                (int) (winW - CAT_WIDTH), HEADER_H, 12, colorHeader);
+                (int) (winW - CAT_WIDTH), HEADER_H, 14, colorHeader);
         ctx.fill((int) (winX + CAT_WIDTH), (int) (winY + HEADER_H - 6),
                 (int) (winX + winW), (int) (winY + HEADER_H), colorHeader);
 
-        // Header gradient accent line
+        // Header accent line
         RenderUtil.gradientLine(ctx, (int) (winX + CAT_WIDTH), (int) (winY + HEADER_H - 1),
                 (int) (winW - CAT_WIDTH), 1, colorAccent, colorAccent2);
 
-        // Logo
+        // Client name + version in header
         RenderUtil.drawGradientText(ctx, ChaosClient.CLIENT_NAME,
-                (int) (winX + CAT_WIDTH + 12), (int) (winY + 9), 0, 1.5f);
+                (int) (winX + CAT_WIDTH + 14), (int) (winY + 10), 0, 1.5f);
         int nameW = client.textRenderer.getWidth(ChaosClient.CLIENT_NAME);
         ctx.drawTextWithShadow(client.textRenderer, " v" + ChaosClient.CLIENT_VERSION,
-                (int) (winX + CAT_WIDTH + 14 + nameW), (int) (winY + 9), 0xFF555566);
+                (int) (winX + CAT_WIDTH + 16 + nameW), (int) (winY + 10), 0xFF555566);
 
-        // Tab buttons (Modules / Themes)
-        renderTabs(ctx, mouseX, mouseY);
+        // Keybind prompt
+        if (bindingModule != null) {
+            String prompt = "\u041D\u0430\u0436\u043C\u0438\u0442\u0435 \u043A\u043B\u0430\u0432\u0438\u0448\u0443: " + bindingModule.getName();
+            int pw = client.textRenderer.getWidth(prompt);
+            ctx.drawTextWithShadow(client.textRenderer, prompt,
+                    (int) (winX + winW - pw - 12), (int) (winY + 10), 0xFFFFAA44);
+        }
 
-        // ── Category sidebar ──────────────────────────────────
-        renderCategories(ctx, mouseX, mouseY);
+        // Sidebar
+        renderSidebar(ctx, mouseX, mouseY);
 
-        // ── Content area ──────────────────────────────────────
+        // Player profile
+        renderPlayerProfile(ctx);
+
+        // Content area (clipped)
         int contentX = (int) (winX + CAT_WIDTH + 1);
         int contentY = (int) (winY + HEADER_H);
         int contentW = (int) (winW - CAT_WIDTH - 1);
         int contentH = (int) (winH - HEADER_H);
 
         ctx.enableScissor(contentX, contentY, contentX + contentW, contentY + contentH);
-
-        if (currentTab == Tab.MODULES) {
+        if (activeTab == SidebarTab.MODULES) {
             renderModules(ctx, mouseX, mouseY, contentX, contentY, contentW);
         } else {
-            renderThemePanel(ctx, mouseX, mouseY, contentX, contentY, contentW, contentH);
+            renderThemesPanel(ctx, mouseX, mouseY, contentX, contentY, contentW, contentH);
         }
-
         ctx.disableScissor();
 
         ctx.getMatrices().popMatrix();
     }
 
-    // ─── Tab buttons ──────────────────────────────────────────
+    // --- Sidebar (categories + themes tab) ---
 
-    private void renderTabs(DrawContext ctx, int mouseX, int mouseY) {
-        int tabY = (int) (winY + 7);
-        int tabBaseX = (int) (winX + winW - 150);
-
-        String[] tabNames = {"Modules", "Themes"};
-        Tab[] tabs = {Tab.MODULES, Tab.THEMES};
-
-        float targetIndicatorX = currentTab == Tab.MODULES ? tabBaseX : tabBaseX + 70;
-        tabIndicatorX = (float) Animate.lerp(tabIndicatorX, targetIndicatorX, 0.15);
-
-        // Animated underline
-        RenderUtil.roundedRectGradientH(ctx, (int) tabIndicatorX, tabY + 12, 60, 2, 1, colorAccent, colorAccent2);
-
-        for (int i = 0; i < tabNames.length; i++) {
-            int tx = tabBaseX + i * 70;
-            boolean active = tabs[i] == currentTab;
-            boolean hovered = mouseX >= tx && mouseX <= tx + 60 && mouseY >= tabY && mouseY <= tabY + 14;
-
-            int textColor = active ? 0xFFFFFFFF : (hovered ? 0xFFBBBBCC : 0xFF666677);
-            ctx.drawTextWithShadow(client.textRenderer, tabNames[i], tx + 10, tabY, textColor);
-        }
-    }
-
-    // ─── Category sidebar ─────────────────────────────────────
-
-    private void renderCategories(DrawContext ctx, int mouseX, int mouseY) {
+    private void renderSidebar(DrawContext ctx, int mouseX, int mouseY) {
         Category[] cats = Category.values();
-
-        int targetIdx = 0;
-        for (int i = 0; i < cats.length; i++) {
-            if (cats[i] == selectedCat) { targetIdx = i; break; }
+        int targetIdx = -1;
+        if (activeTab == SidebarTab.MODULES) {
+            for (int i = 0; i < cats.length; i++) {
+                if (cats[i] == selectedCat) { targetIdx = i; break; }
+            }
         }
-        float targetY = HEADER_H + CAT_HEIGHT * targetIdx + 4;
-        renderSelectY = (float) Animate.lerp(renderSelectY, targetY, 0.15);
 
-        // Animated selection bar with gradient
-        RenderUtil.roundedRectGradientH(ctx,
-                (int) winX + 3, (int) (winY + renderSelectY),
-                CAT_WIDTH - 6, CAT_HEIGHT, 6, colorAccent, colorAccent2);
+        float selectorTargetY;
+        if (targetIdx >= 0) {
+            selectorTargetY = HEADER_H + CAT_HEIGHT * targetIdx + 4;
+        } else {
+            selectorTargetY = HEADER_H + CAT_HEIGHT * cats.length + 12;
+        }
+        renderSelectY = (float) Animate.lerp(renderSelectY, selectorTargetY, 0.15);
 
-        // Glow behind selected category
+        // Selection indicator
+        RenderUtil.roundedRectSimple(ctx, (int) winX + 4, (int) (winY + renderSelectY),
+                CAT_WIDTH - 8, CAT_HEIGHT, 10, ColorUtil.withAlpha(colorAccent, 180));
+
         if (glowEnabled) {
             Color gl = new Color((colorAccent >> 16) & 0xFF, (colorAccent >> 8) & 0xFF,
-                    colorAccent & 0xFF, 30);
-            RenderUtil.glow(ctx, winX + 3, winY + renderSelectY, CAT_WIDTH - 6, CAT_HEIGHT, 6, gl, 4);
+                    colorAccent & 0xFF, 25);
+            RenderUtil.glow(ctx, winX + 4, winY + renderSelectY, CAT_WIDTH - 8, CAT_HEIGHT, 10, gl, 2);
         }
 
+        // Category items with Russian names
         for (int i = 0; i < cats.length; i++) {
             float catY = winY + HEADER_H + CAT_HEIGHT * i + 4;
             String icon = ICONS.getOrDefault(cats[i], "\u2022");
-            String name = cats[i].getDisplayName();
+            String name = RU_NAMES.getOrDefault(cats[i], cats[i].getDisplayName());
 
             boolean hovered = mouseX >= winX && mouseX <= winX + CAT_WIDTH &&
                     mouseY >= catY && mouseY < catY + CAT_HEIGHT;
-            boolean selected = cats[i] == selectedCat;
+            boolean selected = activeTab == SidebarTab.MODULES && cats[i] == selectedCat;
 
-            int textColor = selected ? 0xFFFFFFFF : (hovered ? 0xFFCCCCDD : 0xFFAABBCC);
+            int textColor = selected ? 0xFFFFFFFF : (hovered ? 0xFFCCCCDD : 0xFF99AABB);
+            ctx.drawTextWithShadow(client.textRenderer, icon, (int) (winX + 10), (int) (catY + 8), textColor);
+            ctx.drawTextWithShadow(client.textRenderer, name, (int) (winX + 26), (int) (catY + 8), textColor);
+        }
 
-            ctx.drawTextWithShadow(client.textRenderer, icon, (int) (winX + 8), (int) (catY + 7), textColor);
-            ctx.drawTextWithShadow(client.textRenderer, name, (int) (winX + 22), (int) (catY + 7), textColor);
+        // Divider
+        float divY = winY + HEADER_H + CAT_HEIGHT * cats.length + 4;
+        RenderUtil.gradientLine(ctx, (int) winX + 10, (int) divY, CAT_WIDTH - 20, 1, 0xFF333344, 0xFF222233);
+
+        // Themes tab button
+        float themesY = divY + 8;
+        boolean themesHovered = mouseX >= winX && mouseX <= winX + CAT_WIDTH &&
+                mouseY >= themesY && mouseY < themesY + CAT_HEIGHT;
+        boolean themesSelected = activeTab == SidebarTab.THEMES;
+
+        int thCol = themesSelected ? 0xFFFFFFFF : (themesHovered ? 0xFFCCCCDD : 0xFF99AABB);
+        ctx.drawTextWithShadow(client.textRenderer, "\u25C9", (int) (winX + 10), (int) (themesY + 8), thCol);
+        ctx.drawTextWithShadow(client.textRenderer, "\u0422\u0435\u043C\u044B", (int) (winX + 26), (int) (themesY + 8), thCol);
+    }
+
+    // --- Player profile (bottom-left) ---
+
+    private void renderPlayerProfile(DrawContext ctx) {
+        float profileY = winY + winH - PROFILE_H;
+
+        RenderUtil.gradientLine(ctx, (int) winX + 8, (int) profileY, CAT_WIDTH - 16, 1, 0xFF333344, 0xFF222233);
+
+        if (client.player != null) {
+            String playerName = client.player.getName().getString();
+            ctx.drawTextWithShadow(client.textRenderer, "\u263A",
+                    (int) (winX + 10), (int) (profileY + 14), colorAccent);
+            ctx.drawTextWithShadow(client.textRenderer, playerName,
+                    (int) (winX + 24), (int) (profileY + 10), 0xFFEEEEFF);
+            ctx.drawTextWithShadow(client.textRenderer, "\u00A77\u0412 \u0438\u0433\u0440\u0435",
+                    (int) (winX + 24), (int) (profileY + 22), 0xFF667788);
+        } else {
+            ctx.drawTextWithShadow(client.textRenderer, "\u263A",
+                    (int) (winX + 10), (int) (profileY + 14), 0xFF667788);
+            ctx.drawTextWithShadow(client.textRenderer, "\u041D\u0435 \u0432 \u0438\u0433\u0440\u0435",
+                    (int) (winX + 24), (int) (profileY + 14), 0xFF667788);
         }
     }
 
-    // ─── Module list ──────────────────────────────────────────
+    // --- Module list ---
 
     private void renderModules(DrawContext ctx, int mouseX, int mouseY, int areaX, int areaY, int areaW) {
         List<Module> modules = ChaosClient.getInstance().getModuleManager().getModulesByCategory(selectedCat);
@@ -296,118 +309,101 @@ public class ClickGuiScreen extends Screen {
             Module module = modules.get(idx);
             float moduleY = my;
 
-            // Calculate content height
             float contentH = MODULE_H;
             if (expandedModules.getOrDefault(module, false)) {
-                contentH = MODULE_H + 4;
+                contentH = MODULE_H + 6;
                 for (Setting s : module.getSettings()) contentH += SETTING_H;
             }
 
-            // Skip if off-screen
             if (moduleY + contentH < areaY - 10 || moduleY > areaY + winH) {
-                my += contentH + 4;
+                my += contentH + 5;
                 continue;
             }
 
-            boolean hovered = mouseX >= areaX + 4 && mouseX <= areaX + areaW - 4 &&
+            boolean hovered = mouseX >= areaX + 6 && mouseX <= areaX + areaW - 6 &&
                     mouseY >= moduleY && mouseY < moduleY + contentH;
             boolean expanded = expandedModules.getOrDefault(module, false);
 
-            // Module background
-            int bgColor;
             if (module.isEnabled()) {
-                // Gradient accent bg for enabled modules
-                int accentAlpha = ColorUtil.withAlpha(colorAccent, 35);
-                int accentAlpha2 = ColorUtil.withAlpha(colorAccent2, 20);
-                RenderUtil.roundedRectGradientH(ctx, areaX + 4, (int) moduleY,
-                        areaW - 8, (int) contentH, 8, accentAlpha, accentAlpha2);
+                RenderUtil.roundedRectSimple(ctx, areaX + 6, (int) moduleY,
+                        areaW - 12, (int) contentH, 10, ColorUtil.withAlpha(colorAccent, 30));
+                RenderUtil.roundedRectSimple(ctx, areaX + 6, (int) moduleY + 4,
+                        3, MODULE_H - 8, 2, colorAccent);
             } else if (hovered) {
-                RenderUtil.roundedRectSimple(ctx, areaX + 4, (int) moduleY,
-                        areaW - 8, (int) contentH, 8, 0x15FFFFFF);
+                RenderUtil.roundedRectSimple(ctx, areaX + 6, (int) moduleY,
+                        areaW - 12, (int) contentH, 10, 0x12FFFFFF);
             }
 
-            // Left accent bar for enabled
-            if (module.isEnabled()) {
-                RenderUtil.roundedRectGradientV(ctx, areaX + 4, (int) moduleY + 3,
-                        3, MODULE_H - 6, 1, colorAccent, colorAccent2);
-            }
-
-            // Module name
             int textColor = module.isEnabled() ? 0xFFFFFFFF : 0xFFBBBBCC;
             ctx.drawTextWithShadow(client.textRenderer, module.getName(),
-                    areaX + 14, (int) (moduleY + 8), textColor);
+                    areaX + 18, (int) (moduleY + 9), textColor);
 
-            // Description on hover
             if (hovered && !expanded && module.getDescription() != null) {
                 ctx.drawTextWithShadow(client.textRenderer,
                         "\u00A77" + module.getDescription(),
-                        areaX + 14 + client.textRenderer.getWidth(module.getName()) + 6,
-                        (int) (moduleY + 8), 0xFF555566);
+                        areaX + 18 + client.textRenderer.getWidth(module.getName()) + 8,
+                        (int) (moduleY + 9), 0xFF555566);
             }
 
-            // Toggle switch (right side)
+            // Toggle switch
             String toggleKey = module.getName() + "_toggle";
-            Animate toggleAnim = toggleAnims.computeIfAbsent(toggleKey, k -> new Animate(module.isEnabled() ? 1 : 0, 0.12));
+            Animate toggleAnim = toggleAnims.computeIfAbsent(toggleKey,
+                    k -> new Animate(module.isEnabled() ? 1 : 0, 0.12));
             toggleAnim.setTarget(module.isEnabled() ? 1 : 0);
             toggleAnim.update();
-            int switchX = areaX + areaW - 42;
-            int switchY = (int) (moduleY + 6);
-            RenderUtil.toggleSwitch(ctx, switchX, switchY, 28, 14,
-                    (float) toggleAnim.getValue(), 0xFF3A3D47, colorAccent);
+            RenderUtil.toggleSwitch(ctx, areaX + areaW - 44, (int) (moduleY + 7),
+                    28, 14, (float) toggleAnim.getValue(), 0xFF3A3D47, colorAccent);
 
-            // Settings expand arrow
+            // Expand arrow (right-click indicator)
             if (!module.getSettings().isEmpty()) {
                 String arrow = expanded ? "\u25BE" : "\u25B8";
                 ctx.drawTextWithShadow(client.textRenderer, arrow,
-                        areaX + areaW - 54, (int) (moduleY + 8), 0xFF666677);
+                        areaX + areaW - 56, (int) (moduleY + 9), 0xFF666677);
             }
 
-            // Keybind
-            if (module.getKeyBind() != 0) {
-                String key = org.lwjgl.glfw.GLFW.glfwGetKeyName(module.getKeyBind(), 0);
+            // Keybind display
+            if (module == bindingModule) {
+                ctx.drawTextWithShadow(client.textRenderer, "[\u2026]",
+                        areaX + areaW - 80, (int) (moduleY + 9), 0xFFFFAA44);
+            } else if (module.getKeyBind() != 0) {
+                String key = GLFW.glfwGetKeyName(module.getKeyBind(), 0);
                 if (key != null) {
                     String keyText = "[" + key.toUpperCase() + "]";
                     int kw = client.textRenderer.getWidth(keyText);
                     ctx.drawTextWithShadow(client.textRenderer, "\u00A78" + keyText,
-                            areaX + areaW - 56 - kw, (int) (moduleY + 8), 0xFF444455);
+                            areaX + areaW - 58 - kw, (int) (moduleY + 9), 0xFF444455);
                 }
             }
 
-            // ─── Settings (expanded) ──────────────────────────
             if (expanded) {
-                float settingY = moduleY + MODULE_H + 2;
-
+                float settingY = moduleY + MODULE_H + 3;
                 for (Setting setting : module.getSettings()) {
-                    renderSetting(ctx, setting, module, areaX + 18, settingY, areaW - 36, mouseX, mouseY);
+                    renderSetting(ctx, setting, module, areaX + 22, settingY, areaW - 44, mouseX, mouseY);
                     settingY += SETTING_H;
                 }
             }
 
-            my += contentH + 4;
+            my += contentH + 5;
         }
     }
 
-    // ─── Setting rendering ────────────────────────────────────
+    // --- Setting rendering ---
 
     private void renderSetting(DrawContext ctx, Setting setting, Module module,
                                int x, float y, int width, int mouseX, int mouseY) {
-        // Subtle setting background
-        RenderUtil.roundedRectSimple(ctx, x, (int) y, width, SETTING_H - 2, 4, 0x0CFFFFFF);
+        RenderUtil.roundedRectSimple(ctx, x, (int) y, width, SETTING_H - 2, 6, 0x0AFFFFFF);
 
         if (setting instanceof BooleanSetting bs) {
             ctx.drawTextWithShadow(client.textRenderer, setting.getName(),
-                    x + 6, (int) (y + 5), 0xFFDDDDEE);
+                    x + 8, (int) (y + 6), 0xFFDDDDEE);
 
-            // Animated toggle switch
             String key = module.getName() + "_" + setting.getName();
             Animate anim = toggleAnims.computeIfAbsent(key, k -> new Animate(bs.isEnabled() ? 1 : 0, 0.12));
             anim.setTarget(bs.isEnabled() ? 1 : 0);
             anim.update();
 
-            int switchX = x + width - 30;
-            int switchY = (int) (y + 3);
-            RenderUtil.toggleSwitch(ctx, switchX, switchY, 24, 12,
-                    (float) anim.getValue(), 0xFF3A3D47, colorAccent);
+            RenderUtil.toggleSwitch(ctx, x + width - 30, (int) (y + 4),
+                    24, 12, (float) anim.getValue(), 0xFF3A3D47, colorAccent);
 
         } else if (setting instanceof NumberSetting ns) {
             String val = ns.getIncrement() >= 1
@@ -415,39 +411,33 @@ public class ClickGuiScreen extends Screen {
                     : String.format("%.2f", ns.getValue());
 
             ctx.drawTextWithShadow(client.textRenderer, setting.getName(),
-                    x + 6, (int) (y + 2), 0xFFDDDDEE);
+                    x + 8, (int) (y + 2), 0xFFDDDDEE);
             int vw = client.textRenderer.getWidth(val);
             ctx.drawTextWithShadow(client.textRenderer, val,
-                    x + width - vw - 6, (int) (y + 2), colorAccent);
+                    x + width - vw - 8, (int) (y + 2), colorAccent);
 
-            // Animated slider with gradient fill
-            float sliderY = y + 13;
-            float sliderW = width - 12;
+            float sliderY = y + 14;
+            float sliderW = width - 16;
             float percent = (float) ((ns.getValue() - ns.getMin()) / (ns.getMax() - ns.getMin()));
 
-            // Animated slider position
             String sliderKey = module.getName() + "_" + setting.getName() + "_s";
             Animate sliderAnim = sliderAnims.computeIfAbsent(sliderKey, k -> new Animate(percent, 0.15));
             sliderAnim.setTarget(percent);
             sliderAnim.update();
             float animPercent = (float) sliderAnim.getValue();
 
-            // Track
-            RenderUtil.roundedRectSimple(ctx, x + 6, (int) sliderY, (int) sliderW, 4, 2, 0xFF2A2D37);
+            RenderUtil.roundedRectSimple(ctx, x + 8, (int) sliderY, (int) sliderW, 4, 2, 0xFF2A2D37);
 
-            // Fill with gradient
             int fillW = (int) (sliderW * animPercent);
             if (fillW > 0) {
-                RenderUtil.roundedRectGradientH(ctx, x + 6, (int) sliderY, fillW, 4, 2, colorAccent, colorAccent2);
+                RenderUtil.roundedRectSimple(ctx, x + 8, (int) sliderY, fillW, 4, 2, colorAccent);
             }
 
-            // Knob
-            int knobX = x + 6 + (int) (sliderW * animPercent) - 3;
+            int knobX = x + 8 + (int) (sliderW * animPercent) - 3;
             RenderUtil.circle(ctx, knobX + 3, sliderY + 2, 4, 0xFFFFFFFF);
 
-            // Slider drag handling
             if (draggingSlider == ns) {
-                float startX = x + 6;
+                float startX = x + 8;
                 float mxClamped = Math.max(startX, Math.min(mouseX, startX + sliderW));
                 double pct = (mxClamped - startX) / sliderW;
                 double newVal = ns.getMin() + pct * (ns.getMax() - ns.getMin());
@@ -456,166 +446,69 @@ public class ClickGuiScreen extends Screen {
 
         } else if (setting instanceof ModeSetting ms) {
             ctx.drawTextWithShadow(client.textRenderer, setting.getName(),
-                    x + 6, (int) (y + 5), 0xFFDDDDEE);
+                    x + 8, (int) (y + 6), 0xFFDDDDEE);
 
-            // Mode pill with accent background
             String mode = ms.getMode();
             int mw = client.textRenderer.getWidth(mode);
-            int pillX = x + width - mw - 14;
-            int pillY = (int) (y + 2);
-            RenderUtil.roundedRectSimple(ctx, pillX, pillY, mw + 10, 14, 7,
+            int pillX = x + width - mw - 16;
+            int pillY = (int) (y + 3);
+            RenderUtil.roundedRectSimple(ctx, pillX, pillY, mw + 12, 14, 7,
                     ColorUtil.withAlpha(colorAccent, 50));
-            ctx.drawTextWithShadow(client.textRenderer, mode, pillX + 5, pillY + 3, colorAccent);
+            ctx.drawTextWithShadow(client.textRenderer, mode, pillX + 6, pillY + 3, colorAccent);
         }
     }
 
-    // ─── Theme customization panel ────────────────────────────
+    // --- Themes panel (as full content area) ---
 
-    private void renderThemePanel(DrawContext ctx, int mouseX, int mouseY,
-                                  int areaX, int areaY, int areaW, int areaH) {
-        float py = areaY + PAD + themeScrollOffset;
-        int pad = 12;
-        int itemH = 30;
-
-        // Title
-        ctx.drawTextWithShadow(client.textRenderer, "\u00A7lTheme Customization",
-                areaX + pad, (int) py + 4, 0xFFEEEEFF);
-        py += 24;
-
-        // Gradient accent line
-        RenderUtil.gradientLine(ctx, areaX + pad, (int) py, areaW - pad * 2, 1, colorAccent, colorAccent2);
-        py += 8;
-
-        // ── Theme selector grid ───────────────────────────────
-        ctx.drawTextWithShadow(client.textRenderer, "Color Theme",
-                areaX + pad, (int) py, 0xFFBBBBCC);
-        py += 14;
+    private void renderThemesPanel(DrawContext ctx, int mouseX, int mouseY,
+                                   int areaX, int areaY, int areaW, int areaH) {
+        ctx.drawTextWithShadow(client.textRenderer, "\u25C9 \u0426\u0432\u0435\u0442\u043E\u0432\u044B\u0435 \u0442\u0435\u043C\u044B",
+                areaX + 14, areaY + 10, 0xFFEEEEFF);
+        RenderUtil.gradientLine(ctx, areaX + 12, areaY + 22, areaW - 24, 1, colorAccent, colorAccent2);
 
         String[] themes = ThemeUtil.getThemeNames();
-        int cols = 3;
-        int cellW = (areaW - pad * 2 - (cols - 1) * 4) / cols;
-        int cellH = 22;
+        String current = ThemeUtil.getTheme();
+        int itemH = 28;
+        int cols = 2;
+        int itemW = (areaW - 36) / cols;
+        int startY = areaY + 30;
 
+        float drawY = startY + themeScrollY;
         for (int i = 0; i < themes.length; i++) {
             int col = i % cols;
             int row = i / cols;
-            int tx = areaX + pad + col * (cellW + 4);
-            int ty = (int) py + row * (cellH + 4);
+            float itemX = areaX + 12 + col * (itemW + 6);
+            float itemY = drawY + row * (itemH + 4);
 
-            boolean selected = themes[i].equals(ThemeUtil.getTheme());
-            boolean hovered = mouseX >= tx && mouseX <= tx + cellW && mouseY >= ty && mouseY <= ty + cellH;
+            boolean selected = themes[i].equals(current);
+            boolean hovered = mouseX >= itemX && mouseX <= itemX + itemW &&
+                    mouseY >= itemY && mouseY < itemY + itemH;
 
-            // Theme preview — use the theme's own colors
-            String savedTheme = ThemeUtil.getTheme();
-            ThemeUtil.setTheme(themes[i]);
-            Color c1 = ThemeUtil.getThemeColor(0, ThemeType.GENERAL, 1);
-            Color c2 = ThemeUtil.getThemeColor(5, ThemeType.GENERAL, 1);
-            ThemeUtil.setTheme(savedTheme);
-
-            int bg = selected ? ColorUtil.withAlpha(ColorUtil.toARGB(c1), 80)
+            int bg = selected ? ColorUtil.withAlpha(colorAccent, 100)
                     : (hovered ? 0x25FFFFFF : 0x12FFFFFF);
-            RenderUtil.roundedRectSimple(ctx, tx, ty, cellW, cellH, 6, bg);
+            RenderUtil.roundedRectSimple(ctx, (int) itemX, (int) itemY, itemW, itemH - 2, 8, bg);
 
             if (selected) {
-                RenderUtil.roundedRectOutline(ctx, tx, ty, cellW, cellH, 6, 1, ColorUtil.toARGB(c1));
-                // Mini gradient preview bar
-                RenderUtil.roundedRectGradientH(ctx, tx + 3, ty + cellH - 5, cellW - 6, 3, 1,
-                        ColorUtil.toARGB(c1), ColorUtil.toARGB(c2));
+                RenderUtil.roundedRectOutline(ctx, (int) itemX, (int) itemY,
+                        itemW, itemH - 2, 8, 1, ColorUtil.withAlpha(colorAccent, 200));
             }
 
-            // Theme name (truncated if too wide)
-            String displayName = themes[i];
-            if (client.textRenderer.getWidth(displayName) > cellW - 8) {
-                while (client.textRenderer.getWidth(displayName + "..") > cellW - 8 && displayName.length() > 1) {
-                    displayName = displayName.substring(0, displayName.length() - 1);
-                }
-                displayName += "..";
-            }
-            ctx.drawTextWithShadow(client.textRenderer, displayName, tx + 4, ty + 7,
-                    selected ? 0xFFFFFFFF : 0xFFBBBBCC);
+            int textColor = selected ? 0xFFFFFFFF : 0xFFAABBCC;
+            ctx.drawTextWithShadow(client.textRenderer, themes[i],
+                    (int) (itemX + 10), (int) (itemY + 9), textColor);
         }
-
-        py += ((themes.length + cols - 1) / cols) * (cellH + 4) + 12;
-
-        // ── Sliders ───────────────────────────────────────────
-        py = renderThemeSlider(ctx, "Gradient Speed", gradientSpeed, 0.1f, 3.0f, 0.1f,
-                areaX + pad, (int) py, areaW - pad * 2, mouseX, mouseY, "gradientSpeed");
-        py = renderThemeSlider(ctx, "Pulse Frequency", pulseFrequency, 0.1f, 3.0f, 0.1f,
-                areaX + pad, (int) py, areaW - pad * 2, mouseX, mouseY, "pulseFrequency");
-        py = renderThemeSlider(ctx, "Glow Intensity", glowIntensity, 0.0f, 2.0f, 0.1f,
-                areaX + pad, (int) py, areaW - pad * 2, mouseX, mouseY, "glowIntensity");
-
-        py += 8;
-
-        // ── Toggle options ────────────────────────────────────
-        py = renderThemeToggle(ctx, "Dark Mode", darkMode, areaX + pad, (int) py, areaW - pad * 2, mouseX, mouseY, "darkMode");
-        py = renderThemeToggle(ctx, "Shadow", shadowEnabled, areaX + pad, (int) py, areaW - pad * 2, mouseX, mouseY, "shadow");
-        py = renderThemeToggle(ctx, "Glow Effects", glowEnabled, areaX + pad, (int) py, areaW - pad * 2, mouseX, mouseY, "glow");
     }
 
-    private float renderThemeSlider(DrawContext ctx, String name, float value, float min, float max,
-                                    float inc, int x, int y, int width, int mx, int my, String id) {
-        ctx.drawTextWithShadow(client.textRenderer, name, x, y + 2, 0xFFDDDDEE);
-        String valStr = String.format("%.1f", value);
-        int vw = client.textRenderer.getWidth(valStr);
-        ctx.drawTextWithShadow(client.textRenderer, valStr, x + width - vw, y + 2, colorAccent);
-
-        int sliderY = y + 14;
-        float percent = (value - min) / (max - min);
-
-        // Track
-        RenderUtil.roundedRectSimple(ctx, x, sliderY, width, 4, 2, 0xFF2A2D37);
-
-        // Fill
-        int fillW = (int) (width * percent);
-        if (fillW > 0) {
-            RenderUtil.roundedRectGradientH(ctx, x, sliderY, fillW, 4, 2, colorAccent, colorAccent2);
-        }
-
-        // Knob
-        RenderUtil.circle(ctx, x + width * percent, sliderY + 2, 4, 0xFFFFFFFF);
-
-        return y + 28;
-    }
-
-    private float renderThemeToggle(DrawContext ctx, String name, boolean value,
-                                    int x, int y, int width, int mx, int my, String id) {
-        ctx.drawTextWithShadow(client.textRenderer, name, x, y + 3, 0xFFDDDDEE);
-
-        Animate anim = toggleAnims.computeIfAbsent("theme_" + id, k -> new Animate(value ? 1 : 0, 0.12));
-        anim.setTarget(value ? 1 : 0);
-        anim.update();
-
-        RenderUtil.toggleSwitch(ctx, x + width - 28, y, 28, 14,
-                (float) anim.getValue(), 0xFF3A3D47, colorAccent);
-
-        return y + 22;
-    }
-
-    // ═══════════════════════════════════════════════════════════
+    // ============================================================
     //  INPUT
-    // ═══════════════════════════════════════════════════════════
+    // ============================================================
 
     @Override
     public boolean mouseClicked(Click click, boolean bl) {
         int mx = (int) click.x(), my = (int) click.y();
         int button = click.button();
 
-        // ─── Tab buttons ──────────────────────────────────────
-        int tabY = (int) (winY + 7);
-        int tabBaseX = (int) (winX + winW - 150);
-        if (my >= tabY && my <= tabY + 14) {
-            if (mx >= tabBaseX && mx <= tabBaseX + 60) {
-                currentTab = Tab.MODULES;
-                return true;
-            }
-            if (mx >= tabBaseX + 70 && mx <= tabBaseX + 130) {
-                currentTab = Tab.THEMES;
-                return true;
-            }
-        }
-
-        // ─── Header drag ──────────────────────────────────────
+        // Header drag
         if (mx >= winX + CAT_WIDTH && mx <= winX + winW &&
                 my >= winY && my <= winY + HEADER_H) {
             dragging = true;
@@ -624,95 +517,61 @@ public class ClickGuiScreen extends Screen {
             return true;
         }
 
-        // ─── Category clicks ──────────────────────────────────
-        if (mx >= winX && mx <= winX + CAT_WIDTH && my >= winY + HEADER_H) {
-            Category[] cats = Category.values();
+        // Sidebar clicks
+        Category[] cats = Category.values();
+        if (mx >= winX && mx <= winX + CAT_WIDTH && my >= winY + HEADER_H &&
+                my < winY + winH - PROFILE_H) {
+
             for (int i = 0; i < cats.length; i++) {
                 float catY = winY + HEADER_H + CAT_HEIGHT * i + 4;
                 if (my >= catY && my < catY + CAT_HEIGHT) {
                     selectedCat = cats[i];
+                    activeTab = SidebarTab.MODULES;
                     scrollOffset = 0;
-                    currentTab = Tab.MODULES;
                     return true;
                 }
             }
-        }
 
-        // ─── Theme panel clicks ───────────────────────────────
-        if (currentTab == Tab.THEMES) {
-            return handleThemeClicks(mx, my, button);
-        }
-
-        // ─── Module clicks ────────────────────────────────────
-        return handleModuleClicks(mx, my, button, click, bl);
-    }
-
-    private boolean handleThemeClicks(int mx, int my, int button) {
-        int areaX = (int) (winX + CAT_WIDTH + 1);
-        int areaY = (int) (winY + HEADER_H);
-        int areaW = (int) (winW - CAT_WIDTH - 1);
-        int pad = 12;
-        float py = areaY + PAD + themeScrollOffset + 24 + 8 + 14;
-
-        // Theme grid clicks
-        String[] themes = ThemeUtil.getThemeNames();
-        int cols = 3;
-        int cellW = (areaW - pad * 2 - (cols - 1) * 4) / cols;
-        int cellH = 22;
-
-        for (int i = 0; i < themes.length; i++) {
-            int col = i % cols;
-            int row = i / cols;
-            int tx = areaX + pad + col * (cellW + 4);
-            int ty = (int) py + row * (cellH + 4);
-
-            if (mx >= tx && mx <= tx + cellW && my >= ty && my <= ty + cellH) {
-                ThemeUtil.setTheme(themes[i]);
-                // Also update the HUD theme setting
-                Setting s = ChaosClient.getInstance().getModuleManager().getSetting("HUD", "Theme");
-                if (s instanceof ModeSetting ms) ms.setMode(themes[i]);
+            float divY = winY + HEADER_H + CAT_HEIGHT * cats.length + 4;
+            float themesY = divY + 8;
+            if (my >= themesY && my < themesY + CAT_HEIGHT) {
+                activeTab = SidebarTab.THEMES;
+                themeScrollY = 0;
                 return true;
             }
         }
 
-        py += ((themes.length + cols - 1) / cols) * (cellH + 4) + 12;
-
-        // Slider clicks for theme settings
-        int sliderHeight = 28;
-        // Gradient Speed
-        if (my >= py && my < py + sliderHeight && mx >= areaX + pad && mx <= areaX + areaW - pad) {
-            float pct = (float) (mx - areaX - pad) / (areaW - pad * 2);
-            gradientSpeed = Math.max(0.1f, Math.min(3.0f, 0.1f + pct * 2.9f));
-            gradientSpeed = Math.round(gradientSpeed * 10) / 10f;
-            return true;
+        // Themes panel clicks
+        if (activeTab == SidebarTab.THEMES) {
+            return handleThemePanelClick(mx, my);
         }
-        py += sliderHeight;
-        // Pulse Frequency
-        if (my >= py && my < py + sliderHeight && mx >= areaX + pad && mx <= areaX + areaW - pad) {
-            float pct = (float) (mx - areaX - pad) / (areaW - pad * 2);
-            pulseFrequency = Math.max(0.1f, Math.min(3.0f, 0.1f + pct * 2.9f));
-            pulseFrequency = Math.round(pulseFrequency * 10) / 10f;
-            return true;
-        }
-        py += sliderHeight;
-        // Glow Intensity
-        if (my >= py && my < py + sliderHeight && mx >= areaX + pad && mx <= areaX + areaW - pad) {
-            float pct = (float) (mx - areaX - pad) / (areaW - pad * 2);
-            glowIntensity = Math.max(0.0f, Math.min(2.0f, pct * 2.0f));
-            glowIntensity = Math.round(glowIntensity * 10) / 10f;
-            return true;
-        }
-        py += sliderHeight + 8;
 
-        // Toggle clicks
-        int toggleW = areaW - pad * 2;
-        int toggleH = 22;
-        if (my >= py && my < py + toggleH) { darkMode = !darkMode; return true; }
-        py += toggleH;
-        if (my >= py && my < py + toggleH) { shadowEnabled = !shadowEnabled; return true; }
-        py += toggleH;
-        if (my >= py && my < py + toggleH) { glowEnabled = !glowEnabled; return true; }
+        // Module clicks: left=toggle, right=expand settings, middle=keybind
+        return handleModuleClicks(mx, my, button, click, bl);
+    }
 
+    private boolean handleThemePanelClick(int mx, int my) {
+        int areaX = (int) (winX + CAT_WIDTH + 1);
+        int areaW = (int) (winW - CAT_WIDTH - 1);
+        int startY = (int) (winY + HEADER_H + 30);
+
+        String[] themes = ThemeUtil.getThemeNames();
+        int itemH = 28;
+        int cols = 2;
+        int itemW = (areaW - 36) / cols;
+
+        for (int i = 0; i < themes.length; i++) {
+            int col = i % cols;
+            int row = i / cols;
+            float itemX = areaX + 12 + col * (itemW + 6);
+            float itemY = startY + themeScrollY + row * (itemH + 4);
+
+            if (mx >= itemX && mx <= itemX + itemW &&
+                    my >= itemY && my < itemY + itemH) {
+                ThemeUtil.setTheme(themes[i]);
+                return true;
+            }
+        }
         return false;
     }
 
@@ -725,33 +584,35 @@ public class ClickGuiScreen extends Screen {
         for (Module module : modules) {
             float contentH = MODULE_H;
             if (expandedModules.getOrDefault(module, false)) {
-                contentH = MODULE_H + 4;
+                contentH = MODULE_H + 6;
                 for (Setting s : module.getSettings()) contentH += SETTING_H;
             }
 
-            // Module header click — toggle switch area
-            if (mx >= areaX + areaW - 46 && mx <= areaX + areaW - 14 &&
+            if (mx >= areaX + 6 && mx <= areaX + areaW - 6 &&
                     my >= modY && my < modY + MODULE_H) {
-                module.toggle();
-                return true;
-            }
 
-            // Module header click — left side toggles settings
-            if (mx >= areaX && mx <= areaX + areaW - 46 &&
-                    my >= modY && my < modY + MODULE_H) {
-                if (button == 0 && !module.getSettings().isEmpty()) {
-                    expandedModules.put(module, !expandedModules.getOrDefault(module, false));
-                } else if (button == 1) {
+                if (button == 0) {
+                    // Left click -> toggle module
                     module.toggle();
+                    return true;
+                } else if (button == 1) {
+                    // Right click -> expand/collapse settings
+                    if (!module.getSettings().isEmpty()) {
+                        expandedModules.put(module, !expandedModules.getOrDefault(module, false));
+                    }
+                    return true;
+                } else if (button == 2) {
+                    // Middle click -> keybind mode
+                    bindingModule = module;
+                    return true;
                 }
-                return true;
             }
 
             // Settings clicks
             if (expandedModules.getOrDefault(module, false)) {
-                float settingY = modY + MODULE_H + 2;
+                float settingY = modY + MODULE_H + 3;
                 for (Setting setting : module.getSettings()) {
-                    if (mx >= areaX + 18 && mx <= areaX + areaW - 18 &&
+                    if (mx >= areaX + 22 && mx <= areaX + areaW - 22 &&
                             my >= settingY && my < settingY + SETTING_H) {
 
                         if (setting instanceof BooleanSetting bs) {
@@ -760,8 +621,6 @@ public class ClickGuiScreen extends Screen {
                             if (button == 0) ms.cycle();
                         } else if (setting instanceof NumberSetting ns) {
                             draggingSlider = ns;
-                            sliderLeft = areaX + 24;
-                            sliderWidth = areaW - 48;
                         }
                         return true;
                     }
@@ -769,7 +628,7 @@ public class ClickGuiScreen extends Screen {
                 }
             }
 
-            modY += contentH + 4;
+            modY += contentH + 5;
         }
 
         return super.mouseClicked(click, bl);
@@ -794,14 +653,32 @@ public class ClickGuiScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double hAmount, double vAmount) {
-        if (currentTab == Tab.THEMES) {
-            themeScrollOffset += (float) (vAmount * 25);
-            if (themeScrollOffset > 0) themeScrollOffset = 0;
-        } else {
-            scrollOffset += (float) (vAmount * 25);
-            if (scrollOffset > 0) scrollOffset = 0;
+        if (activeTab == SidebarTab.THEMES) {
+            themeScrollY += (float) (vAmount * 25);
+            if (themeScrollY > 0) themeScrollY = 0;
+            return true;
         }
+        scrollOffset += (float) (vAmount * 25);
+        if (scrollOffset > 0) scrollOffset = 0;
         return true;
+    }
+
+    @Override
+    public boolean keyPressed(net.minecraft.client.input.KeyInput keyInput) {
+        int keyCode = keyInput.key();
+        if (bindingModule != null) {
+            if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+                bindingModule = null;
+            } else if (keyCode == GLFW.GLFW_KEY_DELETE || keyCode == GLFW.GLFW_KEY_BACKSPACE) {
+                bindingModule.setKeyBind(0);
+                bindingModule = null;
+            } else {
+                bindingModule.setKeyBind(keyCode);
+                bindingModule = null;
+            }
+            return true;
+        }
+        return super.keyPressed(keyInput);
     }
 
     @Override
@@ -809,15 +686,20 @@ public class ClickGuiScreen extends Screen {
 
     @Override
     public void close() {
+        bindingModule = null;
         ChaosClient.getInstance().getConfigManager().save();
         super.close();
     }
 
-    // ─── Static accessors for theme settings ──────────────────
+    // --- Static accessors for theme settings (used by ConfigManager) ---
     public static float getGradientSpeed() { return gradientSpeed; }
-    public static float getPulseFrequency() { return pulseFrequency; }
+    public static void setGradientSpeed(float v) { gradientSpeed = v; }
     public static float getGlowIntensity() { return glowIntensity; }
+    public static void setGlowIntensity(float v) { glowIntensity = v; }
     public static boolean isDarkMode() { return darkMode; }
+    public static void setDarkMode(boolean v) { darkMode = v; }
     public static boolean isShadowEnabled() { return shadowEnabled; }
+    public static void setShadowEnabled(boolean v) { shadowEnabled = v; }
     public static boolean isGlowEnabled() { return glowEnabled; }
+    public static void setGlowEnabled(boolean v) { glowEnabled = v; }
 }
