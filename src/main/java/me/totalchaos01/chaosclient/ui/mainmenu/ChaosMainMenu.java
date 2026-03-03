@@ -99,7 +99,7 @@ public class ChaosMainMenu extends Screen {
 
         // Buttons (with fade-in stagger)
         float buttonWidth = 210;
-        float buttonHeight = 32;
+        float buttonHeight = 34;
         float buttonX = width / 2f - buttonWidth / 2f;
         float buttonStartY = height * 0.34f;
         float buttonGap = 40;
@@ -147,8 +147,8 @@ public class ChaosMainMenu extends Screen {
         // Slight Y offset for slide-in effect
         float offsetY = (1 - fadeIn) * 15;
 
-        RenderUtil.roundedRectSimple(ctx, (int) x, (int) (y + offsetY), (int) w, (int) h, 16, bgColor);
-        RenderUtil.roundedRectOutline(ctx, (int) x, (int) (y + offsetY), (int) w, (int) h, 16, 1, borderColor);
+        RenderUtil.roundedRectSimple(ctx, (int) x, (int) (y + offsetY), (int) w, (int) h, 10, bgColor);
+        RenderUtil.roundedRectOutline(ctx, (int) x, (int) (y + offsetY), (int) w, (int) h, 10, 1, borderColor);
 
         int textColor = ColorUtil.withAlpha(ColorUtil.interpolateColor(0xAAFFFFFF, 0xFFFFFFFF, hover), (int) (255 * fadeIn));
         RenderUtil.drawCenteredText(ctx, text, (int) (x + w / 2), (int) (y + offsetY + h / 2 - 4), textColor);
@@ -165,7 +165,7 @@ public class ChaosMainMenu extends Screen {
 
         // Panel shadow + background
         RenderUtil.shadow(ctx, panelX, panelY, panelW, panelH, 14, 0xFF000000);
-        RenderUtil.roundedRectSimple(ctx, (int) panelX, (int) panelY, panelW, panelH, 14, 0xEE101218);
+        RenderUtil.roundedRectSimple(ctx, (int) panelX, (int) panelY, panelW, panelH, 10, 0xEE101218);
 
         // Header
         ctx.drawTextWithShadow(client.textRenderer, "\u2699 \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438",

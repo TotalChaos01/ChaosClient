@@ -20,6 +20,8 @@ import java.util.function.Consumer;
 @Mixin(SplashOverlay.class)
 public class MixinSplashOverlay {
 
+    private static final long MIN_SPLASH_VISIBLE_MS = 2000L;
+
     @Shadow @Final private MinecraftClient client;
     @Shadow private float progress;
     @Shadow private long reloadCompleteTime;
@@ -134,6 +136,9 @@ public class MixinSplashOverlay {
         }
 
         if (this.reloadCompleteTime == -1L && this.reload.isComplete() && (!this.reloading || g >= 2.0F)) {
+            if (this.reloadStartTime != -1L && l - this.reloadStartTime < MIN_SPLASH_VISIBLE_MS) {
+                return;
+            }
             try {
                 this.reload.throwException();
                 this.exceptionHandler.accept(Optional.empty());

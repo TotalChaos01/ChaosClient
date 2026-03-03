@@ -1,5 +1,7 @@
 package me.totalchaos01.chaosclient.mixin;
 
+import me.totalchaos01.chaosclient.ui.network.AltManagerScreen;
+import me.totalchaos01.chaosclient.ui.network.ViaVersionScreen;
 import net.minecraft.client.gui.screen.multiplayer.MultiplayerScreen;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -18,14 +20,13 @@ public abstract class MixinMultiplayerScreen extends Screen {
 
     @Inject(method = "init", at = @At("RETURN"))
     private void onInit(CallbackInfo ci) {
-        // AltManager Button
         this.addDrawableChild(ButtonWidget.builder(Text.literal("AltManager"), button -> {
-            // TODO: Route to simple AltManager implementation
-        }).dimensions(5, 5, 100, 20).build());
+            this.client.setScreen(new AltManagerScreen((Screen) (Object) this));
+        }).dimensions(8, 8, 110, 20).build());
 
-        // ViaVersion Button
-        this.addDrawableChild(ButtonWidget.builder(Text.literal("ViaVersion / ViaMCP"), button -> {
-            // TODO: Route to ViaVersion UI implementation
-        }).dimensions(110, 5, 120, 20).build());
+        this.addDrawableChild(ButtonWidget.builder(Text.literal("ViaVersion"), button -> {
+            this.client.setScreen(new ViaVersionScreen((Screen) (Object) this));
+        }).dimensions(124, 8, 100, 20).build());
     }
+
 }

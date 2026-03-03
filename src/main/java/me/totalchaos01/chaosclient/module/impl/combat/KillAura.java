@@ -13,7 +13,6 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.passive.AnimalEntity;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.item.Items;
 import net.minecraft.item.ShieldItem;
 import net.minecraft.util.Hand;
 
@@ -35,6 +34,8 @@ public class KillAura extends Module {
     private final BooleanSetting animals = new BooleanSetting("Animals", false);
     private final BooleanSetting autoBlock = new BooleanSetting("AutoBlock", false);
     private final BooleanSetting rotate = new BooleanSetting("Rotate", true);
+    private final BooleanSetting useAttackCooldown = new BooleanSetting("1.9+ Cooldown", true);
+    private final NumberSetting minCooldown = new NumberSetting("Min Cooldown", 0.93, 0.70, 1.0, 0.01);
     private final NumberSetting rotSpeed = new NumberSetting("Rot Speed", 0.6, 0.1, 1.0, 0.05);
 
     private long lastAttackTime;
@@ -43,7 +44,7 @@ public class KillAura extends Module {
     private boolean blocking;
 
     public KillAura() {
-        addSettings(range, minCps, maxCps, priority, players, mobs, animals, autoBlock, rotate, rotSpeed);
+        addSettings(range, minCps, maxCps, priority, players, mobs, animals, autoBlock, rotate, useAttackCooldown, minCooldown, rotSpeed);
         currentDelay = 80;
     }
 
@@ -93,6 +94,13 @@ public class KillAura extends Module {
 
         // Attack with randomized CPS
         if (System.currentTimeMillis() - lastAttackTime < currentDelay) return;
+
+        if (useAttackCooldown.isEnabled()) {
+            float cooldownProgress = mc.player.getAttackCooldownProgress(0.5f);
+            if (cooldownProgress < (float) minCooldown.getValue()) {
+                return;
+            }
+        }
 
         // Unblock briefly to attack
         if (blocking) {

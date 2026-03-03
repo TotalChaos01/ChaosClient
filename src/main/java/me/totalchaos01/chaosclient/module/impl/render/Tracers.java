@@ -36,15 +36,16 @@ public class Tracers extends Module {
     private final BooleanSetting passiveMobs = new BooleanSetting("Passive Mobs", false);
     private final BooleanSetting distanceColor = new BooleanSetting("Distance Color", true);
     private final BooleanSetting themeGradient = new BooleanSetting("Theme Gradient", true);
+    private final BooleanSetting glow = new BooleanSetting("Glow", true);
     private final NumberSetting range = new NumberSetting("Range", 64, 8, 128, 1);
-    private final NumberSetting lineWidth = new NumberSetting("Line Width", 1.5, 0.5, 3, 0.5);
+    private final NumberSetting lineWidth = new NumberSetting("Line Width", 1.0, 0.5, 2.5, 0.25);
 
     // Smoothed screen positions to prevent jitter
     private final Map<UUID, double[]> smoothedPositions = new HashMap<>();
     private static final double SMOOTH_FACTOR = 0.35;
 
     public Tracers() {
-        addSettings(players, hostileMobs, passiveMobs, distanceColor, themeGradient, range, lineWidth);
+        addSettings(players, hostileMobs, passiveMobs, distanceColor, themeGradient, glow, range, lineWidth);
     }
 
     @Override
@@ -87,7 +88,8 @@ public class Tracers extends Module {
         double entityCenterY = pos.y + entity.getHeight() / 2.0;
 
         double[] screenPos = RenderUtil.worldToScreen(pos.x, entityCenterY, pos.z);
-        if (screenPos == null) return;
+        if (screenPos == null || screenPos.length < 3) return;
+        if (screenPos[2] < 0.0 || screenPos[2] > 1.0) return;
 
         // Smooth the screen-space position to reduce jitter
         UUID uid = entity.getUuid();
@@ -109,7 +111,7 @@ public class Tracers extends Module {
         float lw = (float) lineWidth.getValue();
 
         // Distance-based line width (closer = slightly thicker)
-        float dynamicWidth = lw + (1f - distRatio) * 0.5f;
+        float dynamicWidth = Math.max(0.75f, lw + (1f - distRatio) * 0.2f);
 
         if (themeGradient.isEnabled()) {
             // Theme gradient tracer
@@ -124,20 +126,34 @@ public class Tracers extends Module {
             int startARGB = ColorUtil.withAlpha(ColorUtil.toARGB(startColor), startAlpha);
             int endARGB = ColorUtil.withAlpha(ColorUtil.toARGB(endColor), endAlpha);
 
-            RenderUtil.drawGradientLine(ctx, centerX, centerY, targetX, targetY,
+                if (glow.isEnabled()) {
+                RenderUtil.drawGlowLine(ctx, centerX, centerY, targetX, targetY,
+                    dynamicWidth, endARGB);
+                }
+                RenderUtil.drawGradientLine(ctx, centerX, centerY, targetX, targetY,
                     dynamicWidth, startARGB, endARGB);
         } else if (distanceColor.isEnabled()) {
             // Distance-based color: green (close) -> yellow -> red (far)
             int alpha = (int) (255 * (1f - distRatio * 0.5f));
             int color = getDistanceColor(distRatio, alpha);
-            RenderUtil.drawSmoothLine(ctx, centerX, centerY, targetX, targetY,
+                if (glow.isEnabled()) {
+                RenderUtil.drawGlowLine(ctx, centerX, centerY, targetX, targetY,
                     dynamicWidth, color);
+                } else {
+                RenderUtil.drawSmoothLine(ctx, centerX, centerY, targetX, targetY,
+                    dynamicWidth, color);
+                }
         } else {
             // Simple white tracer
             int alpha = (int) (200 * (1f - distRatio * 0.4f));
             int color = ColorUtil.withAlpha(0xFFFFFFFF, alpha);
-            RenderUtil.drawSmoothLine(ctx, centerX, centerY, targetX, targetY,
-                    dynamicWidth, color);
+            if (glow.isEnabled()) {
+                RenderUtil.drawGlowLine(ctx, centerX, centerY, targetX, targetY,
+                        dynamicWidth, color);
+            } else {
+                RenderUtil.drawSmoothLine(ctx, centerX, centerY, targetX, targetY,
+                        dynamicWidth, color);
+            }
         }
     }
 

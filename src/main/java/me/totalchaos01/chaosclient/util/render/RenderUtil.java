@@ -4,11 +4,9 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.network.PlayerListEntry;
-import net.minecraft.client.render.*;
 import net.minecraft.client.gui.PlayerSkinDrawer;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.Identifier;
-import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
 import org.joml.Vector4f;
 import org.lwjgl.opengl.GL11;
@@ -31,35 +29,32 @@ public final class RenderUtil {
     // ─── Matrix capture for world-to-screen ───────────────────
 
     public static void captureMatrices() {
-        if (mc.gameRenderer == null || mc.options == null) return;
-        var camera = mc.gameRenderer.getCamera();
-        if (camera == null) return;
-        savedModelView = new Matrix4f();
-        savedModelView.identity();
-        savedModelView.rotateX((float) Math.toRadians(camera.getPitch()));
-        savedModelView.rotateY((float) Math.toRadians(camera.getYaw() + 180.0f));
-        savedProjection = mc.gameRenderer.getBasicProjectionMatrix(mc.options.getFov().getValue());
+        try {
+            if (mc.gameRenderer == null || mc.options == null) return;
+            savedModelView = new Matrix4f(RenderSystem.getModelViewMatrix());
+            savedProjection = new Matrix4f(mc.gameRenderer.getBasicProjectionMatrix(mc.options.getFov().getValue()));
+        } catch (Exception ignored) {
+            savedModelView = null;
+            savedProjection = null;
+        }
     }
 
     public static double[] worldToScreen(double wx, double wy, double wz) {
-        if (savedModelView == null || savedProjection == null || mc.gameRenderer == null) return null;
-        var camera = mc.gameRenderer.getCamera();
-        if (camera == null) return null;
-        Vec3d camPos = camera.getCameraPos();
-        float fx = (float) (wx - camPos.x);
-        float fy = (float) (wy - camPos.y);
-        float fz = (float) (wz - camPos.z);
-        Vector4f pos = new Vector4f(fx, fy, fz, 1.0f);
+        if (savedModelView == null || savedProjection == null) return null;
+        Vector4f pos = new Vector4f((float) wx, (float) wy, (float) wz, 1.0f);
         pos.mul(savedModelView);
         pos.mul(savedProjection);
         if (pos.w <= 0.0f) return null;
+
         float ndcX = pos.x / pos.w;
         float ndcY = pos.y / pos.w;
+        float ndcZ = pos.z / pos.w;
         int sw = mc.getWindow().getScaledWidth();
         int sh = mc.getWindow().getScaledHeight();
         double screenX = (ndcX + 1.0) / 2.0 * sw;
         double screenY = (1.0 - ndcY) / 2.0 * sh;
-        return new double[]{screenX, screenY};
+        double depth = (ndcZ + 1.0) / 2.0;
+        return new double[]{screenX, screenY, depth};
     }
 
     // ─── Basic Rectangles ─────────────────────────────────────
@@ -85,14 +80,20 @@ public final class RenderUtil {
         if (len < 0.5) return;
 
         int lw = Math.max(1, Math.round(lineWidth));
-        int hlw = lw / 2;
-        int steps = Math.max(1, Math.min((int) (len * 0.4), 80));
+        int steps = Math.max(1, Math.min((int) (len * 1.25), 600));
+        double nx = -dy / len;
+        double ny = dx / len;
+        int half = lw / 2;
 
         for (int i = 0; i <= steps; i++) {
             double t = (double) i / steps;
-            int px = (int) Math.round(x1 + dx * t);
-            int py = (int) Math.round(y1 + dy * t);
-            ctx.fill(px - hlw - 1, py - hlw - 1, px + hlw + 2, py + hlw + 2, color);
+            double bx = x1 + dx * t;
+            double by = y1 + dy * t;
+            for (int o = -half; o <= half; o++) {
+                int px = (int) Math.round(bx + nx * o);
+                int py = (int) Math.round(by + ny * o);
+                ctx.fill(px, py, px + 1, py + 1, color);
+            }
         }
     }
 
@@ -106,16 +107,29 @@ public final class RenderUtil {
         if (len < 0.5) return;
 
         int lw = Math.max(1, Math.round(lineWidth));
-        int hlw = lw / 2;
-        int steps = Math.max(1, Math.min((int) (len * 0.4), 80));
+        int steps = Math.max(1, Math.min((int) (len * 1.25), 600));
+        double nx = -dy / len;
+        double ny = dx / len;
+        int half = lw / 2;
 
         for (int i = 0; i <= steps; i++) {
             double t = (double) i / steps;
-            int px = (int) Math.round(x1 + dx * t);
-            int py = (int) Math.round(y1 + dy * t);
+            double bx = x1 + dx * t;
+            double by = y1 + dy * t;
             int color = ColorUtil.interpolateColor(startColor, endColor, (float) t);
-            ctx.fill(px - hlw - 1, py - hlw - 1, px + hlw + 2, py + hlw + 2, color);
+            for (int o = -half; o <= half; o++) {
+                int px = (int) Math.round(bx + nx * o);
+                int py = (int) Math.round(by + ny * o);
+                ctx.fill(px, py, px + 1, py + 1, color);
+            }
         }
+    }
+
+    public static void drawGlowLine(DrawContext ctx, double x1, double y1, double x2, double y2,
+                                    float lineWidth, int color) {
+        int glow = ColorUtil.withAlpha(color, Math.min(110, (color >> 24) & 0xFF));
+        drawSmoothLine(ctx, x1, y1, x2, y2, lineWidth + 2.0f, glow);
+        drawSmoothLine(ctx, x1, y1, x2, y2, lineWidth, color);
     }
 
     /**

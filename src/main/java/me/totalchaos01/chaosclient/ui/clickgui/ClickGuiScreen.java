@@ -143,8 +143,6 @@ public class ClickGuiScreen extends Screen {
         // Blur background
         RenderUtil.blurBackground(ctx, this.width, this.height, 8);
         int overlayAlpha = (int) (0x50 * Math.min(1.0, (System.currentTimeMillis() - openTime) / 300.0));
-        // Text in top left
-        ctx.drawTextWithShadow(client.textRenderer, "ChaosClient v1.1.1", 12, 6, 0xFFFFFFFF);
         ctx.fill(0, 0, this.width, this.height, (overlayAlpha << 24));
 
         ctx.getMatrices().pushMatrix();
@@ -224,6 +222,12 @@ public class ClickGuiScreen extends Screen {
     // --- Sidebar (categories + themes tab) ---
 
     private void renderSidebar(DrawContext ctx, int mouseX, int mouseY) {
+        ctx.drawTextWithShadow(client.textRenderer, ChaosClient.CLIENT_NAME,
+            (int) (winX + 10), (int) (winY + 8), 0xFFEFEFFF);
+        ctx.drawTextWithShadow(client.textRenderer,
+            "v" + ChaosClient.CLIENT_VERSION + " • " + client.getGameVersion(),
+            (int) (winX + 10), (int) (winY + 18), 0xFF9098B5);
+
         Category[] cats = Category.values();
         int targetIdx = -1;
         if (activeTab == SidebarTab.MODULES) {

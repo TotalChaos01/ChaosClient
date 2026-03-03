@@ -14,7 +14,6 @@ import net.minecraft.block.entity.EnderChestBlockEntity;
 import net.minecraft.block.entity.ShulkerBoxBlockEntity;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.chunk.WorldChunk;
 
 /**
@@ -86,31 +85,28 @@ public class ChestESP extends Module {
 
                     double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE;
                     double maxX = -Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
-                    boolean allVisible = true;
+                    int visibleCount = 0;
 
                     for (double[] corner : corners) {
                         double[] screen = RenderUtil.worldToScreen(corner[0], corner[1], corner[2]);
-                        if (screen == null) {
-                            allVisible = false;
-                            break;
-                        }
+                        if (screen == null || screen.length < 3 || screen[2] < 0 || screen[2] > 1.0) continue;
+                        visibleCount++;
                         minX = Math.min(minX, screen[0]);
                         minY = Math.min(minY, screen[1]);
                         maxX = Math.max(maxX, screen[0]);
                         maxY = Math.max(maxY, screen[1]);
                     }
 
-                    if (!allVisible) continue;
+                    if (visibleCount < 2) continue;
 
                     double w = maxX - minX;
                     double h = maxY - minY;
                     if (w < 1 || h < 1) continue;
 
-                    // Fill with transparency
-                    int fillColor = (0x30 << 24) | (color & 0x00FFFFFF);
-                    RenderUtil.rect(ctx, minX, minY, w, h, fillColor);
-                    // Outline
-                    RenderUtil.rectOutline(ctx, minX, minY, w, h, 1, color);
+                    int outline = color;
+                    int glow = (0x44 << 24) | (color & 0x00FFFFFF);
+                    RenderUtil.rectOutline(ctx, minX - 1, minY - 1, w + 2, h + 2, 1, glow);
+                    RenderUtil.rectOutline(ctx, minX, minY, w, h, 1, outline);
                 }
             }
         }

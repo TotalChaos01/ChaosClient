@@ -31,7 +31,7 @@ import java.awt.*;
 @ModuleInfo(name = "ESP", description = "Highlights entities through walls", category = Category.RENDER)
 public class ESP extends Module {
 
-    private final ModeSetting mode = new ModeSetting("Mode", "Corner", "Box", "Corner", "Glow");
+    private final ModeSetting mode = new ModeSetting("Mode", "Outline", "Outline", "Corner", "Box", "Glow");
     private final BooleanSetting players = new BooleanSetting("Players", true);
     private final BooleanSetting hostileMobs = new BooleanSetting("Hostile Mobs", true);
     private final BooleanSetting passiveMobs = new BooleanSetting("Passive Mobs", false);
@@ -91,21 +91,19 @@ public class ESP extends Module {
 
         double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE;
         double maxX = -Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
-        boolean anyVisible = false;
         int visibleCount = 0;
 
         for (double[] corner : corners) {
             double[] screen = RenderUtil.worldToScreen(corner[0], corner[1], corner[2]);
-            if (screen == null || screen[2] < 0 || screen[2] > 1.0) continue;
+            if (screen == null || screen.length < 3 || screen[2] < 0 || screen[2] > 1.0) continue;
             visibleCount++;
-            anyVisible = true;
             minX = Math.min(minX, screen[0]);
             minY = Math.min(minY, screen[1]);
             maxX = Math.max(maxX, screen[0]);
             maxY = Math.max(maxY, screen[1]);
         }
 
-        if (visibleCount < 4) return;
+        if (visibleCount < 2) return;
 
         int ix = (int) minX, iy = (int) minY;
         int bw = (int) (maxX - minX), bh = (int) (maxY - minY);
@@ -122,6 +120,12 @@ public class ESP extends Module {
         int t = Math.max(1, Math.round(lw));
 
         switch (mode.getMode()) {
+            case "Outline" -> {
+                drawOutline(ctx, ix - 1, iy - 1, bw + 2, bh + 2, 1, 0xAA000000);
+                drawOutline(ctx, ix, iy, bw, bh, 1, themeWithAlpha);
+                int glowCol = ColorUtil.withAlpha(themeARGB, 50);
+                drawOutline(ctx, ix - 2, iy - 2, bw + 4, bh + 4, 1, glowCol);
+            }
             case "Box" -> {
                 // Black outline behind
                 drawOutline(ctx, ix - 1, iy - 1, bw + 2, bh + 2, 1, 0xAA000000);
