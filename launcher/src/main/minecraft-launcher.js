@@ -779,7 +779,7 @@ class MinecraftLauncher extends EventEmitter {
         }
 
         // Fallback: install from bundled resources (first launch / no internet)
-        const bundledFileName = 'ChaosClient-1.1.1.jar';
+        const bundledFileName = 'ChaosClient-1.2.0.jar';
         const bundledDest = path.join(modsDir, bundledFileName);
         const bundledPaths = [
             path.join(process.resourcesPath || '', bundledFileName),

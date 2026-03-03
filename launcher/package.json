@@ -1,6 +1,6 @@
 {
   "name": "chaosclient-launcher",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "ChaosClient Launcher — Universal Minecraft Client Launcher",
   "author": "totalchaos01",
   "homepage": "https://github.com/totalchaos01/ChaosClient",
@@ -27,8 +27,8 @@
     ],
     "extraResources": [
       {
-        "from": "../build/libs/ChaosClient-1.1.1.jar",
-        "to": "ChaosClient-1.1.1.jar"
+        "from": "../build/libs/ChaosClient-1.2.0.jar",
+        "to": "ChaosClient-1.2.0.jar"
       }
     ],
     "linux": {
