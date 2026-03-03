@@ -64,51 +64,44 @@ public class ChaosMainMenu extends Screen {
         // Dark background
         ctx.fill(0, 0, width, height, 0xFF0D0D12);
 
-        // Animated ambient gradient
+        // Blur overlay
+        RenderUtil.blurBackground(ctx, width, height, 6);
+
+        // Animated ambient gradient (smooth — single pass, no stripe overlaps)
         Color themeColor = ThemeUtil.getThemeColor(bgPhase, ThemeType.LOGO, 0.5f);
         Color themeColor2 = ThemeUtil.getThemeColor(bgPhase + 3, ThemeType.LOGO, 0.5f);
-        int g1 = ColorUtil.withAlpha(ColorUtil.toARGB(themeColor), (int) (12 * fade));
-        int g2 = ColorUtil.withAlpha(ColorUtil.toARGB(themeColor2), (int) (8 * fade));
+        int g1 = ColorUtil.withAlpha(ColorUtil.toARGB(themeColor), (int) (14 * fade));
+        int g2 = ColorUtil.withAlpha(ColorUtil.toARGB(themeColor2), (int) (10 * fade));
 
-        // Top gradient (theme glow)
-        RenderUtil.gradientRect(ctx, 0, 0, width, height * 0.5, g1, 0x00000000);
-        // Bottom gradient
-        RenderUtil.gradientRect(ctx, 0, height * 0.5, width, height * 0.5, 0x00000000, g2);
-        // Side vignette
-        RenderUtil.gradientRect(ctx, 0, 0, width * 0.15, height, 0x40000000, 0x00000000);
-        RenderUtil.gradientRect(ctx, width * 0.85, 0, width * 0.15, height, 0x00000000, 0x40000000);
+        // Single full-screen gradient (no stripes from overlapping rects)
+        RenderUtil.gradientRect(ctx, 0, 0, width, height, g1, g2);
 
-        // Logo with fade
+        // ─── Client name top-left ─────────────────────────────
         int logoAlpha = (int) (255 * fade);
-        String logoText = ChaosClient.CLIENT_NAME;
-        int logoColor = ColorUtil.withAlpha(ColorUtil.toARGB(ThemeUtil.getThemeColor(0, ThemeType.LOGO, 1)), logoAlpha);
-
         ctx.getMatrices().pushMatrix();
-        float scale = 5.0f;
-        int logoW = client.textRenderer.getWidth(logoText);
-        float logoX = (width / 2f - logoW * scale / 2f) / scale;
-        float logoY = (height * 0.18f) / scale;
+        float scale = 3.5f;
         ctx.getMatrices().scale(scale, scale);
-        ctx.drawTextWithShadow(client.textRenderer, logoText, (int) logoX, (int) logoY, logoColor);
+        RenderUtil.drawGradientText(ctx, ChaosClient.CLIENT_NAME, (int)(14 / scale), (int)(12 / scale), 0, 1.5f);
         ctx.getMatrices().popMatrix();
 
-        // Version under logo
+        // Version under name
         String version = "v" + ChaosClient.CLIENT_VERSION;
-        int vw = client.textRenderer.getWidth(version);
-        ctx.drawTextWithShadow(client.textRenderer, version, width / 2 - vw / 2,
-                (int) (height * 0.18f + scale * 10 + 8), ColorUtil.withAlpha(0xFFFFFFFF, (int) (128 * fade)));
+        ctx.drawTextWithShadow(client.textRenderer, version, 16,
+                (int)(12 + scale * 10 + 4), ColorUtil.withAlpha(0xFF999999, logoAlpha));
 
-        // Subtitle
-        String subtitle = "\u0423\u043D\u0438\u0432\u0435\u0440\u0441\u0430\u043B\u044C\u043D\u044B\u0439 \u043A\u043B\u0438\u0435\u043D\u0442 Minecraft";
-        int sw = client.textRenderer.getWidth(subtitle);
-        ctx.drawTextWithShadow(client.textRenderer, subtitle, width / 2 - sw / 2,
-                (int) (height * 0.18f + scale * 10 + 20), ColorUtil.withAlpha(0xFFAAAAAA, (int) (200 * fade)));
+        // Player nick and MC version
+        String playerNick = client.getSession() != null ? client.getSession().getUsername() : "Player";
+        String mcVer = "Minecraft 1.21.11";
+        ctx.drawTextWithShadow(client.textRenderer, "\u00A77\u0418\u0433\u0440\u043E\u043A: \u00A7f" + playerNick, 16,
+                (int)(12 + scale * 10 + 16), ColorUtil.withAlpha(0xFFFFFFFF, (int)(200 * fade)));
+        ctx.drawTextWithShadow(client.textRenderer, "\u00A78" + mcVer, 16,
+                (int)(12 + scale * 10 + 28), ColorUtil.withAlpha(0xFF888888, (int)(180 * fade)));
 
         // Buttons (with fade-in stagger)
         float buttonWidth = 210;
         float buttonHeight = 32;
         float buttonX = width / 2f - buttonWidth / 2f;
-        float buttonStartY = height * 0.42f;
+        float buttonStartY = height * 0.34f;
         float buttonGap = 40;
 
         singleHover = (float) Animate.lerp(singleHover, isInButton(mouseX, mouseY, buttonX, buttonStartY, buttonWidth, buttonHeight) ? 1 : 0, 0.2);
@@ -154,8 +147,8 @@ public class ChaosMainMenu extends Screen {
         // Slight Y offset for slide-in effect
         float offsetY = (1 - fadeIn) * 15;
 
-        RenderUtil.roundedRectSimple(ctx, (int) x, (int) (y + offsetY), (int) w, (int) h, 10, bgColor);
-        RenderUtil.roundedRectOutline(ctx, (int) x, (int) (y + offsetY), (int) w, (int) h, 10, 1, borderColor);
+        RenderUtil.roundedRectSimple(ctx, (int) x, (int) (y + offsetY), (int) w, (int) h, 16, bgColor);
+        RenderUtil.roundedRectOutline(ctx, (int) x, (int) (y + offsetY), (int) w, (int) h, 16, 1, borderColor);
 
         int textColor = ColorUtil.withAlpha(ColorUtil.interpolateColor(0xAAFFFFFF, 0xFFFFFFFF, hover), (int) (255 * fadeIn));
         RenderUtil.drawCenteredText(ctx, text, (int) (x + w / 2), (int) (y + offsetY + h / 2 - 4), textColor);
@@ -252,7 +245,7 @@ public class ChaosMainMenu extends Screen {
         float buttonWidth = 210;
         float buttonHeight = 32;
         float buttonX = width / 2f - buttonWidth / 2f;
-        float buttonStartY = height * 0.42f;
+        float buttonStartY = height * 0.34f;
         float buttonGap = 40;
 
         if (isInButton(mouseX, mouseY, buttonX, buttonStartY, buttonWidth, buttonHeight)) {

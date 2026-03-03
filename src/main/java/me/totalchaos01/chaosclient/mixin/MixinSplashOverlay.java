@@ -54,6 +54,7 @@ public class MixinSplashOverlay {
             alpha = MathHelper.ceil(MathHelper.clamp(g, 0.15F, 1.0F) * 255.0F);
         }
 
+        // Dark terminal background
         int backColor = (alpha << 24) | 0x0a0a0f;
         context.fill(0, 0, width, height, backColor);
 
@@ -62,17 +63,68 @@ public class MixinSplashOverlay {
 
         if (f < 1.0F) {
             float opacity = 1.0F - MathHelper.clamp(f, 0.0F, 1.0F);
-            int barAlpha = Math.round(opacity * 255.0F);
+            int textAlpha = Math.round(opacity * 255.0F);
+            int green = (textAlpha << 24) | 0x55FF55;     // terminal green
+            int purple = (textAlpha << 24) | 0xA855F7;     // theme purple
+            int gray = (textAlpha << 24) | 0x888888;       // dim gray
+            int white = (textAlpha << 24) | 0xEEEEEE;
 
-            int barW = 200;
-            int barH = 5;
-            int barX = width / 2 - barW / 2;
-            int barY = height / 2 + 25;
-            
-            context.fill(barX, barY, barX + barW, barY + barH, (barAlpha << 24) | 0x000000);
-            
-            int p = (int) (barW * this.progress);
-            context.fill(barX, barY, barX + p, barY + barH, (barAlpha << 24) | 0xA855F7);
+            // ─── Client title (big, top area) ───────────────
+            var tr = this.client.textRenderer;
+            String title = "ChaosClient v1.1.1";
+            context.drawTextWithShadow(tr, title, 16, 12, purple);
+
+            // ─── Linux-style [OK] status lines ──────────────
+            String[] stages = {
+                "Загрузка ядра клиента",
+                "Инициализация EventBus",
+                "Загрузка модулей",
+                "Инициализация тем",
+                "Загрузка конфигурации",
+                "Подключение модулей PVP",
+                "Инициализация рендера",
+                "Загрузка шрифтов",
+                "Применение миксинов",
+                "Финализация"
+            };
+
+            int lineY = 30;
+            float progressPer = this.progress / 1.0f;
+            int completedStages = (int)(progressPer * stages.length);
+
+            for (int i = 0; i < stages.length; i++) {
+                if (i <= completedStages) {
+                    // [OK] or [..] status
+                    String status;
+                    int statusColor;
+                    if (i < completedStages) {
+                        status = "[ OK ]";
+                        statusColor = green;
+                    } else {
+                        status = "[ .. ]";
+                        statusColor = (textAlpha << 24) | 0xFFAA00; // yellow for in-progress
+                    }
+                    context.drawTextWithShadow(tr, status, 16, lineY, statusColor);
+                    context.drawTextWithShadow(tr, stages[i], 62, lineY, white);
+                }
+                lineY += 11;
+            }
+
+            // ─── Hash progress bar at bottom ─────────────────
+            int barY = height - 28;
+            int barWidth = 30;
+            int filled = (int)(barWidth * this.progress);
+            int empty = barWidth - filled;
+
+            StringBuilder barStr = new StringBuilder("[");
+            for (int i = 0; i < filled; i++) barStr.append('#');
+            for (int i = 0; i < empty; i++) barStr.append('-');
+            barStr.append("] ").append(String.format("%.0f%%", this.progress * 100));
+
+            context.drawTextWithShadow(tr, barStr.toString(), 16, barY, purple);
+
+            // Loading label
+            context.drawTextWithShadow(tr, "Загрузка ChaosClient...", 16, barY - 12, gray);
         }
 
         if (f >= 2.0F) {

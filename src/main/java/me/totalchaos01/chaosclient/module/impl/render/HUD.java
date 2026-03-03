@@ -101,46 +101,43 @@ public class HUD extends Module {
 
     private void renderWatermark(DrawContext ctx) {
         String name = ChaosClient.CLIENT_NAME;
+        String ver = "v" + ChaosClient.CLIENT_VERSION;
         Color themeColor = ThemeUtil.getThemeColor(0, ThemeType.LOGO, 1);
+        int nameW = mc.textRenderer.getWidth(name);
+        int verW = mc.textRenderer.getWidth(ver);
+        int boxW = Math.max(nameW, verW) + 12;
 
         String themeMode = theme.getMode();
 
         switch (themeMode) {
             case "Skeet" -> {
-                // Skeet style — dark bar with bordered background
-                int nameW = mc.textRenderer.getWidth(name + " " + ChaosClient.CLIENT_VERSION);
-                ctx.fill(3, 3, 8 + nameW + 4, 16, 0xFF222222);
-                ctx.fill(4, 4, 7 + nameW + 3, 15, 0xFF1A1A1A);
+                // Skeet — dark bordered bar, name + version on 2 lines
+                ctx.fill(3, 3, 4 + boxW + 4, 28, 0xFF222222);
+                ctx.fill(4, 4, 3 + boxW + 3, 27, 0xFF1A1A1A);
                 ctx.drawTextWithShadow(mc.textRenderer, name, 6, 5, ColorUtil.toARGB(themeColor));
-                ctx.drawTextWithShadow(mc.textRenderer, " " + ChaosClient.CLIENT_VERSION, 6 + mc.textRenderer.getWidth(name), 5, 0xFF888888);
+                ctx.drawTextWithShadow(mc.textRenderer, ver, 6, 16, 0xFF666666);
             }
             case "Never Lose" -> {
-                // NeverLose style — info bar with FPS, username, etc.
-                String info = name + " | " + (mc.player != null ? mc.player.getName().getString() : "Player") +
-                        " | FPS: " + mc.getCurrentFps() + " | " + ChaosClient.CLIENT_VERSION;
-                int infoW = mc.textRenderer.getWidth(info);
-                RenderUtil.roundedRectSimple(ctx, 3, 3, infoW + 10, 14, 4, 0xCC1A1A2E);
-                ctx.drawTextWithShadow(mc.textRenderer, info, 8, 5, ColorUtil.toARGB(themeColor));
+                // NeverLose — info bar with player name
+                String user = mc.player != null ? mc.player.getName().getString() : "Player";
+                RenderUtil.roundedRectSimple(ctx, 3, 3, boxW + 8, 26, 6, 0xCC1A1A2E);
+                ctx.drawTextWithShadow(mc.textRenderer, name, 8, 5, ColorUtil.toARGB(themeColor));
+                ctx.drawTextWithShadow(mc.textRenderer, "§7" + ver + " §8| §7" + user, 8, 16, 0xFF888888);
             }
             case "One Tap" -> {
-                // OneTap style — minimal transparent bar
-                int nameW = mc.textRenderer.getWidth(name);
-                ctx.fill(3, 3, 8 + nameW + 4, 15, 0x60000000);
+                // OneTap — minimal transparent bar
+                ctx.fill(3, 3, 4 + boxW + 4, 28, 0x60000000);
                 ctx.drawTextWithShadow(mc.textRenderer, name, 6, 5, 0xFFFFFFFF);
+                ctx.drawTextWithShadow(mc.textRenderer, ver, 6, 16, 0xFF999999);
             }
             default -> {
-                // Rise-style — per-character gradient text with glow
-                int nameW = mc.textRenderer.getWidth(name + " v" + ChaosClient.CLIENT_VERSION);
+                // Rise-style — gradient text with glow, version below
                 Color glowColor = ThemeUtil.getThemeColor(0, ThemeType.LOGO, 1);
-
-                // Subtle glow behind watermark
-                RenderUtil.glow(ctx, 2, 1, nameW + 6, 12, 4,
+                RenderUtil.glow(ctx, 2, 1, nameW + 6, 22, 5,
                         new Color(glowColor.getRed(), glowColor.getGreen(), glowColor.getBlue(), 25), 3);
 
                 RenderUtil.drawGradientText(ctx, name, 4, 4, 0, 1.5f);
-                int drawX = 4 + mc.textRenderer.getWidth(name);
-                // Version after client name
-                ctx.drawTextWithShadow(mc.textRenderer, " §7v" + ChaosClient.CLIENT_VERSION, drawX, 4, 0xFF888888);
+                ctx.drawTextWithShadow(mc.textRenderer, "§7" + ver, 4, 15, 0xFF888888);
             }
         }
     }

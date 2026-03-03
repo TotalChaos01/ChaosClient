@@ -140,7 +140,9 @@ public class ClickGuiScreen extends Screen {
         openAnim.update();
         float scale = (float) openAnim.getValue();
 
-        int overlayAlpha = (int) (0x70 * Math.min(1.0, (System.currentTimeMillis() - openTime) / 300.0));
+        // Blur background
+        RenderUtil.blurBackground(ctx, this.width, this.height, 8);
+        int overlayAlpha = (int) (0x50 * Math.min(1.0, (System.currentTimeMillis() - openTime) / 300.0));
         ctx.fill(0, 0, this.width, this.height, (overlayAlpha << 24));
 
         ctx.getMatrices().pushMatrix();
@@ -159,19 +161,19 @@ public class ClickGuiScreen extends Screen {
             RenderUtil.glow(ctx, winX, winY, winW, winH, 14, gc, 3);
         }
 
-        // Sidebar background
-        RenderUtil.roundedRectSimple(ctx, (int) winX, (int) winY, CAT_WIDTH, (int) winH, 14, colorSidebar);
-        ctx.fill((int) (winX + CAT_WIDTH - 14), (int) winY, (int) (winX + CAT_WIDTH), (int) (winY + winH), colorSidebar);
+        // Sidebar background (increased rounding)
+        RenderUtil.roundedRectSimple(ctx, (int) winX, (int) winY, CAT_WIDTH, (int) winH, 16, colorSidebar);
+        ctx.fill((int) (winX + CAT_WIDTH - 16), (int) winY, (int) (winX + CAT_WIDTH), (int) (winY + winH), colorSidebar);
 
         // Module area background
         RenderUtil.roundedRectSimple(ctx, (int) (winX + CAT_WIDTH), (int) winY,
-                (int) (winW - CAT_WIDTH), (int) winH, 14, colorBg);
+                (int) (winW - CAT_WIDTH), (int) winH, 16, colorBg);
         ctx.fill((int) (winX + CAT_WIDTH), (int) winY,
-                (int) (winX + CAT_WIDTH + 14), (int) (winY + winH), colorBg);
+                (int) (winX + CAT_WIDTH + 16), (int) (winY + winH), colorBg);
 
         // Header background
         RenderUtil.roundedRectSimple(ctx, (int) (winX + CAT_WIDTH), (int) winY,
-                (int) (winW - CAT_WIDTH), HEADER_H, 14, colorHeader);
+                (int) (winW - CAT_WIDTH), HEADER_H, 16, colorHeader);
         ctx.fill((int) (winX + CAT_WIDTH), (int) (winY + HEADER_H - 6),
                 (int) (winX + winW), (int) (winY + HEADER_H), colorHeader);
 
@@ -236,9 +238,9 @@ public class ClickGuiScreen extends Screen {
         }
         renderSelectY = (float) Animate.lerp(renderSelectY, selectorTargetY, 0.15);
 
-        // Selection indicator
+        // Selection indicator (more rounded)
         RenderUtil.roundedRectSimple(ctx, (int) winX + 4, (int) (winY + renderSelectY),
-                CAT_WIDTH - 8, CAT_HEIGHT, 10, ColorUtil.withAlpha(colorAccent, 180));
+                CAT_WIDTH - 8, CAT_HEIGHT, 12, ColorUtil.withAlpha(colorAccent, 180));
 
         if (glowEnabled) {
             Color gl = new Color((colorAccent >> 16) & 0xFF, (colorAccent >> 8) & 0xFF,
@@ -285,12 +287,14 @@ public class ClickGuiScreen extends Screen {
 
         if (client.player != null) {
             String playerName = client.player.getName().getString();
-            ctx.drawTextWithShadow(client.textRenderer, "\u263A",
-                    (int) (winX + 10), (int) (profileY + 14), colorAccent);
+            // Draw skin face instead of smiley
+            RenderUtil.drawPlayerFace(ctx, client.player, (int) (winX + 8), (int) (profileY + 8), 16);
             ctx.drawTextWithShadow(client.textRenderer, playerName,
-                    (int) (winX + 24), (int) (profileY + 10), 0xFFEEEEFF);
+                    (int) (winX + 28), (int) (profileY + 8), 0xFFEEEEFF);
             ctx.drawTextWithShadow(client.textRenderer, "\u00A77\u0412 \u0438\u0433\u0440\u0435",
-                    (int) (winX + 24), (int) (profileY + 22), 0xFF667788);
+                    (int) (winX + 28), (int) (profileY + 20), 0xFF667788);
+            ctx.drawTextWithShadow(client.textRenderer, "\u00A78v" + me.totalchaos01.chaosclient.ChaosClient.CLIENT_VERSION,
+                    (int) (winX + 28), (int) (profileY + 30), 0xFF556677);
         } else {
             ctx.drawTextWithShadow(client.textRenderer, "\u263A",
                     (int) (winX + 10), (int) (profileY + 14), 0xFF667788);
@@ -326,12 +330,12 @@ public class ClickGuiScreen extends Screen {
 
             if (module.isEnabled()) {
                 RenderUtil.roundedRectSimple(ctx, areaX + 6, (int) moduleY,
-                        areaW - 12, (int) contentH, 10, ColorUtil.withAlpha(colorAccent, 30));
+                        areaW - 12, (int) contentH, 12, ColorUtil.withAlpha(colorAccent, 30));
                 RenderUtil.roundedRectSimple(ctx, areaX + 6, (int) moduleY + 4,
                         3, MODULE_H - 8, 2, colorAccent);
             } else if (hovered) {
                 RenderUtil.roundedRectSimple(ctx, areaX + 6, (int) moduleY,
-                        areaW - 12, (int) contentH, 10, 0x12FFFFFF);
+                        areaW - 12, (int) contentH, 12, 0x12FFFFFF);
             }
 
             int textColor = module.isEnabled() ? 0xFFFFFFFF : 0xFFBBBBCC;
@@ -391,7 +395,7 @@ public class ClickGuiScreen extends Screen {
 
     private void renderSetting(DrawContext ctx, Setting setting, Module module,
                                int x, float y, int width, int mouseX, int mouseY) {
-        RenderUtil.roundedRectSimple(ctx, x, (int) y, width, SETTING_H - 2, 6, 0x0AFFFFFF);
+        RenderUtil.roundedRectSimple(ctx, x, (int) y, width, SETTING_H - 2, 8, 0x0AFFFFFF);
 
         if (setting instanceof BooleanSetting bs) {
             ctx.drawTextWithShadow(client.textRenderer, setting.getName(),
@@ -486,17 +490,75 @@ public class ClickGuiScreen extends Screen {
 
             int bg = selected ? ColorUtil.withAlpha(colorAccent, 100)
                     : (hovered ? 0x25FFFFFF : 0x12FFFFFF);
-            RenderUtil.roundedRectSimple(ctx, (int) itemX, (int) itemY, itemW, itemH - 2, 8, bg);
+            RenderUtil.roundedRectSimple(ctx, (int) itemX, (int) itemY, itemW, itemH - 2, 10, bg);
 
             if (selected) {
                 RenderUtil.roundedRectOutline(ctx, (int) itemX, (int) itemY,
-                        itemW, itemH - 2, 8, 1, ColorUtil.withAlpha(colorAccent, 200));
+                        itemW, itemH - 2, 10, 1, ColorUtil.withAlpha(colorAccent, 200));
             }
 
             int textColor = selected ? 0xFFFFFFFF : 0xFFAABBCC;
             ctx.drawTextWithShadow(client.textRenderer, themes[i],
                     (int) (itemX + 10), (int) (itemY + 9), textColor);
         }
+
+        // ─── Theme Settings Section ───────────────────────────
+        int rows = (themes.length + cols - 1) / cols;
+        float settingsY = drawY + rows * (itemH + 4) + 16;
+
+        RenderUtil.gradientLine(ctx, areaX + 12, (int) settingsY, areaW - 24, 1, colorAccent, colorAccent2);
+        ctx.drawTextWithShadow(client.textRenderer, "\u2699 \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u0442\u0435\u043C\u044B",
+                areaX + 14, (int) (settingsY + 6), 0xFFEEEEFF);
+        settingsY += 22;
+
+        // Gradient Speed slider
+        ctx.drawTextWithShadow(client.textRenderer, "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0433\u0440\u0430\u0434\u0438\u0435\u043D\u0442\u0430",
+                areaX + 14, (int) settingsY, 0xFFCCCCDD);
+        String gsVal = String.format("%.1f", gradientSpeed);
+        ctx.drawTextWithShadow(client.textRenderer, gsVal,
+                areaX + areaW - client.textRenderer.getWidth(gsVal) - 14, (int) settingsY, colorAccent);
+        settingsY += 12;
+        int sliderX = areaX + 14, sliderW = areaW - 28;
+        float gsPercent = (gradientSpeed - 0.1f) / 2.9f;
+        RenderUtil.roundedRectSimple(ctx, sliderX, (int) settingsY, sliderW, 4, 2, 0xFF2A2D37);
+        int gsFill = (int) (sliderW * gsPercent);
+        if (gsFill > 0) RenderUtil.roundedRectSimple(ctx, sliderX, (int) settingsY, gsFill, 4, 2, colorAccent);
+        RenderUtil.circle(ctx, sliderX + sliderW * gsPercent, settingsY + 2, 4, 0xFFFFFFFF);
+        settingsY += 18;
+
+        // Glow Intensity slider
+        ctx.drawTextWithShadow(client.textRenderer, "\u0418\u043D\u0442\u0435\u043D\u0441\u0438\u0432\u043D\u043E\u0441\u0442\u044C \u0441\u0432\u0435\u0447\u0435\u043D\u0438\u044F",
+                areaX + 14, (int) settingsY, 0xFFCCCCDD);
+        String giVal = String.format("%.1f", glowIntensity);
+        ctx.drawTextWithShadow(client.textRenderer, giVal,
+                areaX + areaW - client.textRenderer.getWidth(giVal) - 14, (int) settingsY, colorAccent);
+        settingsY += 12;
+        float giPercent = (glowIntensity - 0.0f) / 2.0f;
+        RenderUtil.roundedRectSimple(ctx, sliderX, (int) settingsY, sliderW, 4, 2, 0xFF2A2D37);
+        int giFill = (int) (sliderW * giPercent);
+        if (giFill > 0) RenderUtil.roundedRectSimple(ctx, sliderX, (int) settingsY, giFill, 4, 2, colorAccent);
+        RenderUtil.circle(ctx, sliderX + sliderW * giPercent, settingsY + 2, 4, 0xFFFFFFFF);
+        settingsY += 18;
+
+        // Toggle: Dark Mode
+        ctx.drawTextWithShadow(client.textRenderer, "\u0422\u0451\u043C\u043D\u044B\u0439 \u0440\u0435\u0436\u0438\u043C",
+                areaX + 14, (int) settingsY + 2, 0xFFCCCCDD);
+        RenderUtil.toggleSwitch(ctx, areaX + areaW - 38, (int) settingsY, 24, 12,
+                darkMode ? 1f : 0f, 0xFF3A3D47, colorAccent);
+        settingsY += 20;
+
+        // Toggle: Shadow
+        ctx.drawTextWithShadow(client.textRenderer, "\u0422\u0435\u043D\u0438",
+                areaX + 14, (int) settingsY + 2, 0xFFCCCCDD);
+        RenderUtil.toggleSwitch(ctx, areaX + areaW - 38, (int) settingsY, 24, 12,
+                shadowEnabled ? 1f : 0f, 0xFF3A3D47, colorAccent);
+        settingsY += 20;
+
+        // Toggle: Glow
+        ctx.drawTextWithShadow(client.textRenderer, "\u0421\u0432\u0435\u0447\u0435\u043D\u0438\u0435",
+                areaX + 14, (int) settingsY + 2, 0xFFCCCCDD);
+        RenderUtil.toggleSwitch(ctx, areaX + areaW - 38, (int) settingsY, 24, 12,
+                glowEnabled ? 1f : 0f, 0xFF3A3D47, colorAccent);
     }
 
     // ============================================================
@@ -572,6 +634,45 @@ public class ClickGuiScreen extends Screen {
                 return true;
             }
         }
+
+        // Theme settings interaction
+        int rows = (themes.length + cols - 1) / cols;
+        float settingsBaseY = startY + themeScrollY + rows * (itemH + 4) + 16 + 22;
+        int sliderX = areaX + 14, sliderW = areaW - 28;
+
+        // Gradient speed slider
+        float gsSliderY = settingsBaseY + 12;
+        if (my >= gsSliderY - 3 && my <= gsSliderY + 7 && mx >= sliderX && mx <= sliderX + sliderW) {
+            float pct = (float)(mx - sliderX) / sliderW;
+            gradientSpeed = 0.1f + pct * 2.9f;
+            return true;
+        }
+        // Glow intensity slider
+        float giSliderY = gsSliderY + 30;
+        if (my >= giSliderY - 3 && my <= giSliderY + 7 && mx >= sliderX && mx <= sliderX + sliderW) {
+            float pct = (float)(mx - sliderX) / sliderW;
+            glowIntensity = pct * 2.0f;
+            return true;
+        }
+        // Dark mode toggle
+        float dmY = giSliderY + 18;
+        if (my >= dmY && my <= dmY + 14 && mx >= areaX + areaW - 38 && mx <= areaX + areaW - 14) {
+            darkMode = !darkMode;
+            return true;
+        }
+        // Shadow toggle
+        float shY = dmY + 20;
+        if (my >= shY && my <= shY + 14 && mx >= areaX + areaW - 38 && mx <= areaX + areaW - 14) {
+            shadowEnabled = !shadowEnabled;
+            return true;
+        }
+        // Glow toggle
+        float glY = shY + 20;
+        if (my >= glY && my <= glY + 14 && mx >= areaX + areaW - 38 && mx <= areaX + areaW - 14) {
+            glowEnabled = !glowEnabled;
+            return true;
+        }
+
         return false;
     }
 
