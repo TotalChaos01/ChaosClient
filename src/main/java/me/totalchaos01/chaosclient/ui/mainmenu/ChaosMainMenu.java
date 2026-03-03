@@ -91,7 +91,7 @@ public class ChaosMainMenu extends Screen {
 
         // Player nick and MC version
         String playerNick = client.getSession() != null ? client.getSession().getUsername() : "Player";
-        String mcVer = "Minecraft 1.21.11";
+        String mcVer = "Minecraft " + client.getGameVersion();
         ctx.drawTextWithShadow(client.textRenderer, "\u00A77\u0418\u0433\u0440\u043E\u043A: \u00A7f" + playerNick, 16,
                 (int)(12 + scale * 10 + 16), ColorUtil.withAlpha(0xFFFFFFFF, (int)(200 * fade)));
         ctx.drawTextWithShadow(client.textRenderer, "\u00A78" + mcVer, 16,

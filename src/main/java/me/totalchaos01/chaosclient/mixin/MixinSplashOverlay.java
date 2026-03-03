@@ -12,6 +12,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import me.totalchaos01.chaosclient.ChaosClient;
+
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -71,7 +73,7 @@ public class MixinSplashOverlay {
 
             // ─── Client title (big, top area) ───────────────
             var tr = this.client.textRenderer;
-            String title = "ChaosClient v1.1.1";
+            String title = ChaosClient.CLIENT_NAME + " v" + ChaosClient.CLIENT_VERSION;
             context.drawTextWithShadow(tr, title, 16, 12, purple);
 
             // ─── Linux-style [OK] status lines ──────────────

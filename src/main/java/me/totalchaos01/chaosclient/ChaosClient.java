@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory;
 public class ChaosClient implements ClientModInitializer {
 
     public static final String CLIENT_NAME = "ChaosClient";
-    public static final String CLIENT_VERSION = "1.0.0";
+    public static final String CLIENT_VERSION = "1.1.1";
     public static final Logger LOGGER = LoggerFactory.getLogger(CLIENT_NAME);
 
     private static ChaosClient INSTANCE;
