@@ -6,15 +6,22 @@
   "mixins": [],
   "client": [
     "IMinecraftClientAccessor",
+    "ISimpleOptionAccessor",
     "MixinClientConnection",
     "MixinMinecraftClient",
     "MixinClientPlayerEntity",
+    "MixinEntity",
     "MixinGameRenderer",
     "MixinInGameHud",
     "MixinKeyboard",
     "MixinTitleScreen",
     "MixinSplashOverlay",
-    "MixinMultiplayerScreen"
+    "MixinScreen",
+    "MixinMultiplayerScreen",
+    "MixinSelectWorldScreen",
+    "MixinChatScreen",
+    "MixinPlayerMovement",
+    "MixinRenderTickCounter"
   ],
   "injectors": {
     "defaultRequire": 1

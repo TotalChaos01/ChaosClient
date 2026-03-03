@@ -10,7 +10,7 @@ import me.totalchaos01.chaosclient.setting.impl.ModeSetting;
 /**
  * Spoofs the client brand sent to the server.
  */
-@ModuleInfo(name = "ClientSpoofer", description = "Spoofs client brand", category = Category.OTHER)
+@ModuleInfo(name = "ClientSpoofer", description = "Spoofs client brand", category = Category.EXPLOITS)
 public class ClientSpoofer extends Module {
 
     private final ModeSetting mode = new ModeSetting("Mode", "Vanilla", "Vanilla", "Lunar", "Badlion", "Forge", "Optifine");

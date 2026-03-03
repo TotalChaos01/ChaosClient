@@ -71,8 +71,8 @@ public class ClickGuiScreen extends Screen {
             Category.MOVEMENT, "\u27A4",
             Category.PLAYER, "\u263A",
             Category.RENDER, "\u25C9",
-            Category.GHOST, "\uD83D\uDC7B",
-            Category.OTHER, "\u2699"
+            Category.LEGIT, "\u2714",
+            Category.EXPLOITS, "\u26A0"
     );
 
     // --- Russian category names ---
@@ -81,8 +81,8 @@ public class ClickGuiScreen extends Screen {
             Category.MOVEMENT, "\u0414\u0432\u0438\u0436\u0435\u043D\u0438\u0435",
             Category.PLAYER, "\u0418\u0433\u0440\u043E\u043A",
             Category.RENDER, "\u0412\u0438\u0437\u0443\u0430\u043B",
-            Category.GHOST, "\u0413\u043E\u0441\u0442",
-            Category.OTHER, "\u0414\u0440\u0443\u0433\u043E\u0435"
+            Category.LEGIT, "\u041B\u0435\u0433\u0438\u0442",
+            Category.EXPLOITS, "\u042D\u043A\u0441\u043F\u043B\u043E\u0439\u0442\u044B"
     );
 
     // --- Persisted theme settings ---
@@ -91,6 +91,15 @@ public class ClickGuiScreen extends Screen {
     private static boolean darkMode = true;
     private static boolean shadowEnabled = true;
     private static boolean glowEnabled = true;
+
+    // --- Color picker state ---
+    private static float pickerHue = 0.75f;
+    private static float pickerSat = 0.8f;
+    private static float pickerBri = 0.9f;
+
+    // --- Profile settings ---
+    private static boolean nameProtect = false;
+    private static boolean profileMenuOpen = false;
 
     public ClickGuiScreen() {
         super(Text.literal("ChaosClient"));
@@ -181,19 +190,19 @@ public class ClickGuiScreen extends Screen {
         RenderUtil.gradientLine(ctx, (int) (winX + CAT_WIDTH), (int) (winY + HEADER_H - 1),
                 (int) (winW - CAT_WIDTH), 1, colorAccent, colorAccent2);
 
-        // Client name + version in header
-        RenderUtil.drawGradientText(ctx, ChaosClient.CLIENT_NAME,
-                (int) (winX + CAT_WIDTH + 14), (int) (winY + 10), 0, 1.5f);
-        int nameW = client.textRenderer.getWidth(ChaosClient.CLIENT_NAME);
-        ctx.drawTextWithShadow(client.textRenderer, " v" + ChaosClient.CLIENT_VERSION,
-                (int) (winX + CAT_WIDTH + 10 + nameW), (int) (winY + 10), 0xFF555566);
-
-        // Keybind prompt
+        // Keybind prompt or category label in header
         if (bindingModule != null) {
             String prompt = "\u041D\u0430\u0436\u043C\u0438\u0442\u0435 \u043A\u043B\u0430\u0432\u0438\u0448\u0443: " + bindingModule.getName();
             int pw = client.textRenderer.getWidth(prompt);
             ctx.drawTextWithShadow(client.textRenderer, prompt,
                     (int) (winX + winW - pw - 12), (int) (winY + 10), 0xFFFFAA44);
+        } else {
+            // Show current category name in header
+            String catLabel = activeTab == SidebarTab.THEMES
+                    ? "\u0422\u0435\u043C\u044B"
+                    : RU_NAMES.getOrDefault(selectedCat, selectedCat.getDisplayName());
+            ctx.drawTextWithShadow(client.textRenderer, catLabel,
+                    (int) (winX + CAT_WIDTH + 14), (int) (winY + 10), 0xFFCCCCDD);
         }
 
         // Sidebar
@@ -222,13 +231,18 @@ public class ClickGuiScreen extends Screen {
     // --- Sidebar (categories + themes tab) ---
 
     private void renderSidebar(DrawContext ctx, int mouseX, int mouseY) {
-        ctx.drawTextWithShadow(client.textRenderer, ChaosClient.CLIENT_NAME,
-            (int) (winX + 10), (int) (winY + 8), 0xFFEFEFFF);
-        ctx.drawTextWithShadow(client.textRenderer,
-            "v" + ChaosClient.CLIENT_VERSION + " • " + client.getGameVersion(),
-            (int) (winX + 10), (int) (winY + 18), 0xFF9098B5);
-
         Category[] cats = Category.values();
+
+        // ─── Client logo + name at the top of sidebar ───
+        RenderUtil.drawGradientText(ctx, ChaosClient.CLIENT_NAME,
+                (int) (winX + 10), (int) (winY + 8), 0, 1.5f);
+        ctx.drawTextWithShadow(client.textRenderer, "\u00A78v" + ChaosClient.CLIENT_VERSION,
+                (int) (winX + 10), (int) (winY + 19), 0xFF555566);
+
+        // Divider below logo
+        RenderUtil.gradientLine(ctx, (int) winX + 8, (int) (winY + HEADER_H - 2), CAT_WIDTH - 10, 1, colorAccent, colorAccent2);
+
+        // ─── Category selection indicator ───
         int targetIdx = -1;
         if (activeTab == SidebarTab.MODULES) {
             for (int i = 0; i < cats.length; i++) {
@@ -240,7 +254,8 @@ public class ClickGuiScreen extends Screen {
         if (targetIdx >= 0) {
             selectorTargetY = HEADER_H + CAT_HEIGHT * targetIdx + 4;
         } else {
-            selectorTargetY = HEADER_H + CAT_HEIGHT * cats.length + 12;
+            // If themes selected, move selector to themes button position (bottom area)
+            selectorTargetY = winH - PROFILE_H - CAT_HEIGHT - 8;
         }
         renderSelectY = (float) Animate.lerp(renderSelectY, selectorTargetY, 0.15);
 
@@ -254,7 +269,7 @@ public class ClickGuiScreen extends Screen {
             RenderUtil.glow(ctx, winX + 4, winY + renderSelectY, CAT_WIDTH - 8, CAT_HEIGHT, 10, gl, 2);
         }
 
-        // Category items with Russian names
+        // ─── Category items ───
         for (int i = 0; i < cats.length; i++) {
             float catY = winY + HEADER_H + CAT_HEIGHT * i + 4;
             String icon = ICONS.getOrDefault(cats[i], "\u1422");
@@ -269,12 +284,10 @@ public class ClickGuiScreen extends Screen {
             ctx.drawTextWithShadow(client.textRenderer, name, (int) (winX + 26), (int) (catY + 8), textColor);
         }
 
-        // Divider
-        float divY = winY + HEADER_H + CAT_HEIGHT * cats.length + 4;
-        RenderUtil.gradientLine(ctx, (int) winX + 10, (int) divY, CAT_WIDTH - 14, 1, 0xFF333344, 0xFF222233);
+        // ─── Themes tab at bottom, above player profile ───
+        float themesY = winY + winH - PROFILE_H - CAT_HEIGHT - 8;
+        RenderUtil.gradientLine(ctx, (int) winX + 10, (int) (themesY - 4), CAT_WIDTH - 14, 1, 0xFF333344, 0xFF222233);
 
-        // Themes tab button
-        float themesY = divY + 8;
         boolean themesHovered = mouseX >= winX && mouseX <= winX + CAT_WIDTH &&
                 mouseY >= themesY && mouseY < themesY + CAT_HEIGHT;
         boolean themesSelected = activeTab == SidebarTab.THEMES;
@@ -292,20 +305,39 @@ public class ClickGuiScreen extends Screen {
         RenderUtil.gradientLine(ctx, (int) winX + 8, (int) profileY, CAT_WIDTH - 10, 1, 0xFF333344, 0xFF222233);
 
         if (client.player != null) {
-            String playerName = client.player.getName().getString();
+            String playerName = nameProtect ? "Protected" : client.player.getName().getString();
             // Draw skin face instead of smiley
             RenderUtil.drawPlayerFace(ctx, client.player, (int) (winX + 8), (int) (profileY + 8), 10);
             ctx.drawTextWithShadow(client.textRenderer, playerName,
                     (int) (winX + 28), (int) (profileY + 8), 0xFFEEEEFF);
-            ctx.drawTextWithShadow(client.textRenderer, "\u00A77\u0412 \u0438\u0433\u0440\u0435",
-                    (int) (winX + 28), (int) (profileY + 14), 0xFF667788);
-            ctx.drawTextWithShadow(client.textRenderer, "\u00A78v" + me.totalchaos01.chaosclient.ChaosClient.CLIENT_VERSION,
-                    (int) (winX + 28), (int) (profileY + 30), 0xFF556677);
+            ctx.drawTextWithShadow(client.textRenderer, "\u00A77\u0412 \u0438\u0433\u0440\u0435 \u00A78\u25BC",
+                    (int) (winX + 28), (int) (profileY + 18), 0xFF667788);
         } else {
             ctx.drawTextWithShadow(client.textRenderer, "\u263A",
                     (int) (winX + 10), (int) (profileY + 14), 0xFF667788);
             ctx.drawTextWithShadow(client.textRenderer, "\u041D\u0435 \u0432 \u0438\u0433\u0440\u0435",
                     (int) (winX + 24), (int) (profileY + 14), 0xFF667788);
+        }
+
+        // Profile sub-menu popup
+        if (profileMenuOpen) {
+            float menuY = profileY - 52;
+            int menuW = CAT_WIDTH;
+            int menuH = 48;
+
+            RenderUtil.roundedRectSimple(ctx, (int) winX, (int) menuY, menuW, menuH, 8, colorSidebar);
+            RenderUtil.roundedRectOutline(ctx, (int) winX, (int) menuY, menuW, menuH, 8, 1,
+                    ColorUtil.withAlpha(colorAccent, 80));
+
+            // Name Protect toggle
+            ctx.drawTextWithShadow(client.textRenderer, "Name Protect",
+                    (int) (winX + 8), (int) (menuY + 8), 0xFFCCCCDD);
+            RenderUtil.toggleSwitch(ctx, (int) (winX + menuW - 32), (int) (menuY + 6), 24, 12,
+                    nameProtect ? 1f : 0f, 0xFF3A3D47, colorAccent);
+
+            String info = nameProtect ? "\u00A7a\u0417\u0430\u0449\u0438\u0449\u0435\u043D\u043E" : "\u00A77\u041E\u0442\u043A\u043B\u044E\u0447\u0435\u043D\u043E";
+            ctx.drawTextWithShadow(client.textRenderer, info,
+                    (int) (winX + 8), (int) (menuY + 26), 0xFF888899);
         }
     }
 
@@ -322,7 +354,9 @@ public class ClickGuiScreen extends Screen {
             float contentH = MODULE_H;
             if (expandedModules.getOrDefault(module, false)) {
                 contentH = MODULE_H + 6;
-                for (Setting s : module.getSettings()) contentH += SETTING_H;
+                for (Setting s : module.getSettings()) {
+                    if (s.isVisible()) contentH += SETTING_H;
+                }
             }
 
             if (moduleY + contentH < areaY - 10 || moduleY > areaY + winH) {
@@ -388,6 +422,7 @@ public class ClickGuiScreen extends Screen {
             if (expanded) {
                 float settingY = moduleY + MODULE_H + 3;
                 for (Setting setting : module.getSettings()) {
+                    if (!setting.isVisible()) continue;
                     renderSetting(ctx, setting, module, areaX + 22, settingY, areaW - 44, mouseX, mouseY);
                     settingY += SETTING_H;
                 }
@@ -565,6 +600,30 @@ public class ClickGuiScreen extends Screen {
                 areaX + 14, (int) settingsY + 2, 0xFFCCCCDD);
         RenderUtil.toggleSwitch(ctx, areaX + areaW - 38, (int) settingsY, 24, 12,
                 glowEnabled ? 1f : 0f, 0xFF3A3D47, colorAccent);
+        settingsY += 18;
+
+        // ─── Custom Color Picker ──────────────────────────────
+        RenderUtil.gradientLine(ctx, areaX + 12, (int) settingsY, areaW - 24, 1, colorAccent, colorAccent2);
+        ctx.drawTextWithShadow(client.textRenderer, "\u2728 \u0421\u0432\u043E\u0439 \u0446\u0432\u0435\u0442",
+                areaX + 14, (int)(settingsY + 6), 0xFFEEEEFF);
+        settingsY += 22;
+
+        // Hue bar
+        RenderUtil.drawHueBar(ctx, areaX + 14, (int) settingsY, areaW - 28, 12, pickerHue);
+        settingsY += 18;
+
+        // Saturation-Brightness picker
+        RenderUtil.drawSBPicker(ctx, areaX + 14, (int) settingsY, areaW - 28, 60,
+                pickerHue, pickerSat, pickerBri);
+        settingsY += 66;
+
+        // Preview + apply button
+        int previewColor = Color.HSBtoRGB(pickerHue, pickerSat, pickerBri) | 0xFF000000;
+        RenderUtil.roundedRectSimple(ctx, areaX + 14, (int) settingsY, 20, 12, 4, previewColor);
+        RenderUtil.roundedRectSimple(ctx, areaX + 40, (int) settingsY, 76, 14, 7,
+                ColorUtil.withAlpha(colorAccent, 80));
+        ctx.drawTextWithShadow(client.textRenderer, "\u041F\u0440\u0438\u043C\u0435\u043D\u0438\u0442\u044C",
+                areaX + 48, (int)(settingsY + 3), 0xFFEEEEFF);
     }
 
     // ============================================================
@@ -590,6 +649,7 @@ public class ClickGuiScreen extends Screen {
         if (mx >= winX && mx <= winX + CAT_WIDTH && my >= winY + HEADER_H &&
                 my < winY + winH - PROFILE_H) {
 
+            // Category clicks
             for (int i = 0; i < cats.length; i++) {
                 float catY = winY + HEADER_H + CAT_HEIGHT * i + 4;
                 if (my >= catY && my < catY + CAT_HEIGHT) {
@@ -600,11 +660,29 @@ public class ClickGuiScreen extends Screen {
                 }
             }
 
-            float divY = winY + HEADER_H + CAT_HEIGHT * cats.length + 4;
-            float themesY = divY + 8;
+            // Themes tab click (at bottom, above player profile)
+            float themesY = winY + winH - PROFILE_H - CAT_HEIGHT - 8;
             if (my >= themesY && my < themesY + CAT_HEIGHT) {
                 activeTab = SidebarTab.THEMES;
                 themeScrollY = 0;
+                return true;
+            }
+        }
+
+        // Profile area click
+        if (mx >= winX && mx <= winX + CAT_WIDTH &&
+                my >= winY + winH - PROFILE_H && my <= winY + winH) {
+            profileMenuOpen = !profileMenuOpen;
+            return true;
+        }
+
+        // Profile menu clicks (popup above profile)
+        if (profileMenuOpen) {
+            float pmY = winY + winH - PROFILE_H - 52;
+            if (mx >= winX && mx <= winX + CAT_WIDTH && my >= pmY && my <= pmY + 48) {
+                if (my >= pmY + 4 && my <= pmY + 20) {
+                    nameProtect = !nameProtect;
+                }
                 return true;
             }
         }
@@ -679,6 +757,27 @@ public class ClickGuiScreen extends Screen {
             return true;
         }
 
+        // ─── Color picker interactions ──────────────────────
+        float colorBaseY = glY + 18 + 22; // after divider + title
+        // Hue bar click
+        if (my >= colorBaseY - 2 && my <= colorBaseY + 14 && mx >= sliderX && mx <= sliderX + sliderW) {
+            pickerHue = Math.max(0f, Math.min(1f, (float)(mx - sliderX) / sliderW));
+            return true;
+        }
+        // SB picker click
+        float sbY = colorBaseY + 18;
+        if (my >= sbY && my <= sbY + 60 && mx >= sliderX && mx <= sliderX + sliderW) {
+            pickerSat = Math.max(0f, Math.min(1f, (float)(mx - sliderX) / sliderW));
+            pickerBri = Math.max(0f, Math.min(1f, 1.0f - (float)(my - sbY) / 60f));
+            return true;
+        }
+        // Apply button click
+        float applyY = sbY + 66;
+        if (my >= applyY && my <= applyY + 14 && mx >= areaX + 40 && mx <= areaX + 116) {
+            ThemeUtil.setBaseColor(new Color(Color.HSBtoRGB(pickerHue, pickerSat, pickerBri)));
+            return true;
+        }
+
         return false;
     }
 
@@ -692,7 +791,9 @@ public class ClickGuiScreen extends Screen {
             float contentH = MODULE_H;
             if (expandedModules.getOrDefault(module, false)) {
                 contentH = MODULE_H + 6;
-                for (Setting s : module.getSettings()) contentH += SETTING_H;
+                for (Setting s : module.getSettings()) {
+                    if (s.isVisible()) contentH += SETTING_H;
+                }
             }
 
             if (mx >= areaX + 6 && mx <= areaX + areaW - 6 &&
@@ -719,6 +820,7 @@ public class ClickGuiScreen extends Screen {
             if (expandedModules.getOrDefault(module, false)) {
                 float settingY = modY + MODULE_H + 3;
                 for (Setting setting : module.getSettings()) {
+                    if (!setting.isVisible()) continue;
                     if (mx >= areaX + 22 && mx <= areaX + areaW - 22 &&
                             my >= settingY && my < settingY + SETTING_H) {
 
@@ -809,4 +911,6 @@ public class ClickGuiScreen extends Screen {
     public static void setShadowEnabled(boolean v) { shadowEnabled = v; }
     public static boolean isGlowEnabled() { return glowEnabled; }
     public static void setGlowEnabled(boolean v) { glowEnabled = v; }
+    public static boolean isNameProtect() { return nameProtect; }
+    public static void setNameProtect(boolean v) { nameProtect = v; }
 }

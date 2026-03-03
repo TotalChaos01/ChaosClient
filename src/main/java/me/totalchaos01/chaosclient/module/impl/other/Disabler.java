@@ -11,7 +11,7 @@ import me.totalchaos01.chaosclient.setting.impl.ModeSetting;
 /**
  * Attempts to disable server-side anti-cheat checks.
  */
-@ModuleInfo(name = "Disabler", description = "Disables server anti-cheat", category = Category.OTHER)
+@ModuleInfo(name = "Disabler", description = "Disables server anti-cheat", category = Category.EXPLOITS)
 public class Disabler extends Module {
 
     private final ModeSetting mode = new ModeSetting("Mode", "Basic", "Basic", "Grim", "Vulcan", "Matrix");

@@ -12,7 +12,7 @@ import net.minecraft.entity.player.PlayerEntity;
 /**
  * Extends attack reach distance.
  */
-@ModuleInfo(name = "Reach", description = "Extends attack reach distance", category = Category.GHOST)
+@ModuleInfo(name = "Reach", description = "Extends attack reach distance", category = Category.LEGIT)
 public class Reach extends Module {
 
     private final NumberSetting range = new NumberSetting("Range", 3.5, 3.0, 6.0, 0.1);

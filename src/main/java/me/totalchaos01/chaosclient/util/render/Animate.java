@@ -125,4 +125,28 @@ public class Animate {
         t -= 2.625 / 2.75;
         return 7.5625 * t * t + 0.984375;
     }
+
+    /**
+     * Exponential ease-in-out — punchy, starts slow, hits hard, ends slow.
+     */
+    public static double easeInOutExpo(double t) {
+        if (t == 0) return 0;
+        if (t == 1) return 1;
+        if (t < 0.5) return Math.pow(2, 20 * t - 10) / 2;
+        return (2 - Math.pow(2, -20 * t + 10)) / 2;
+    }
+
+    /**
+     * Sine ease-in-out — smooth and natural.
+     */
+    public static double easeInOutSine(double t) {
+        return -(Math.cos(Math.PI * t) - 1) / 2;
+    }
+
+    /**
+     * Quintic ease-out — fast start, smooth end.
+     */
+    public static double easeOutQuint(double t) {
+        return 1 - Math.pow(1 - t, 5);
+    }
 }

@@ -1,5 +1,8 @@
 package me.totalchaos01.chaosclient.command;
 
+import java.util.Collections;
+import java.util.List;
+
 /**
  * Base class for all chat commands.
  */
@@ -18,6 +21,14 @@ public abstract class Command {
     }
 
     public abstract void execute(String[] args);
+
+    /**
+     * Returns tab-completions for the given partial arguments.
+     * Override in subclasses for command-specific completions.
+     */
+    public List<String> getCompletions(String[] args) {
+        return Collections.emptyList();
+    }
 
     public String getName() {
         return name;

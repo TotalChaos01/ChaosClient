@@ -17,7 +17,7 @@ import java.util.concurrent.ThreadLocalRandom;
  * Features: smooth rotation, randomization for legit look,
  * break blocks check, only when attack key held option.
  */
-@ModuleInfo(name = "AimAssist", description = "Subtly aims at nearby players", category = Category.GHOST)
+@ModuleInfo(name = "AimAssist", description = "Subtly aims at nearby players", category = Category.LEGIT)
 public class AimAssist extends Module {
 
     private final NumberSetting speed = new NumberSetting("Speed", 30, 5, 100, 1);

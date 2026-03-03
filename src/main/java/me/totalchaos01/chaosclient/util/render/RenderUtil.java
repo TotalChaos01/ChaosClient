@@ -7,7 +7,10 @@ import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.gui.PlayerSkinDrawer;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.Identifier;
+import net.minecraft.client.render.Camera;
+import net.minecraft.util.math.Vec3d;
 import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import org.joml.Vector4f;
 import org.lwjgl.opengl.GL11;
 
@@ -23,6 +26,7 @@ public final class RenderUtil {
     private static final MinecraftClient mc = MinecraftClient.getInstance();
     private static Matrix4f savedModelView;
     private static Matrix4f savedProjection;
+    private static Vec3d savedCameraPos;
 
     private RenderUtil() {}
 
@@ -31,17 +35,32 @@ public final class RenderUtil {
     public static void captureMatrices() {
         try {
             if (mc.gameRenderer == null || mc.options == null) return;
-            savedModelView = new Matrix4f(RenderSystem.getModelViewMatrix());
-            savedProjection = new Matrix4f(mc.gameRenderer.getBasicProjectionMatrix(mc.options.getFov().getValue()));
+            Camera camera = mc.gameRenderer.getCamera();
+            if (camera == null) return;
+
+            // Build view matrix from camera rotation quaternion.
+            // camera.getRotation() gives world->camera orientation;
+            // conjugate (inverse for unit quaternions) gives the view transform.
+            Quaternionf invRot = new Quaternionf(camera.getRotation()).conjugate();
+            savedModelView = new Matrix4f().rotation(invRot);
+
+            savedProjection = mc.gameRenderer.getBasicProjectionMatrix(
+                    mc.options.getFov().getValue());
+            savedCameraPos = camera.getCameraPos();
         } catch (Exception ignored) {
             savedModelView = null;
             savedProjection = null;
+            savedCameraPos = null;
         }
     }
 
     public static double[] worldToScreen(double wx, double wy, double wz) {
-        if (savedModelView == null || savedProjection == null) return null;
-        Vector4f pos = new Vector4f((float) wx, (float) wy, (float) wz, 1.0f);
+        if (savedModelView == null || savedProjection == null || savedCameraPos == null) return null;
+        Vec3d camPos = savedCameraPos;
+        float relX = (float)(wx - camPos.x);
+        float relY = (float)(wy - camPos.y);
+        float relZ = (float)(wz - camPos.z);
+        Vector4f pos = new Vector4f(relX, relY, relZ, 1.0f);
         pos.mul(savedModelView);
         pos.mul(savedProjection);
         if (pos.w <= 0.0f) return null;
@@ -67,11 +86,11 @@ public final class RenderUtil {
         ctx.fill((int) x1, (int) y1, (int) x2, (int) y2, color);
     }
 
-    // ─── Smooth Line Drawing ──────────────────────────────────
+    // ─── Smooth Line Drawing (GPU-accelerated via matrix rotation) ───
 
     /**
-     * Draw a smooth 2D line using per-pixel plotting (Bresenham-style).
-     * Much smoother than segment-based fill, no visible stair-stepping.
+     * Draw a smooth 2D line using a matrix-rotated rectangle.
+     * The GPU handles rotation — produces perfectly smooth lines in 1 draw call.
      */
     public static void drawSmoothLine(DrawContext ctx, double x1, double y1, double x2, double y2,
                                        float lineWidth, int color) {
@@ -79,26 +98,19 @@ public final class RenderUtil {
         double len = Math.sqrt(dx * dx + dy * dy);
         if (len < 0.5) return;
 
-        int lw = Math.max(1, Math.round(lineWidth));
-        int steps = Math.max(1, Math.min((int) (len * 1.25), 600));
-        double nx = -dy / len;
-        double ny = dx / len;
-        int half = lw / 2;
+        float angle = (float) Math.atan2(dy, dx);
+        int iLen = Math.max(1, (int) Math.ceil(len));
+        int halfW = Math.max(0, (Math.round(lineWidth) - 1) / 2);
 
-        for (int i = 0; i <= steps; i++) {
-            double t = (double) i / steps;
-            double bx = x1 + dx * t;
-            double by = y1 + dy * t;
-            for (int o = -half; o <= half; o++) {
-                int px = (int) Math.round(bx + nx * o);
-                int py = (int) Math.round(by + ny * o);
-                ctx.fill(px, py, px + 1, py + 1, color);
-            }
-        }
+        ctx.getMatrices().pushMatrix();
+        ctx.getMatrices().translate((float) x1, (float) y1);
+        ctx.getMatrices().rotate(angle);
+        ctx.fill(0, -halfW, iLen, halfW + 1, color);
+        ctx.getMatrices().popMatrix();
     }
 
     /**
-     * Smooth gradient line: color fades from startColor to endColor.
+     * Smooth gradient line using matrix rotation + color segments.
      */
     public static void drawGradientLine(DrawContext ctx, double x1, double y1, double x2, double y2,
                                          float lineWidth, int startColor, int endColor) {
@@ -106,29 +118,32 @@ public final class RenderUtil {
         double len = Math.sqrt(dx * dx + dy * dy);
         if (len < 0.5) return;
 
-        int lw = Math.max(1, Math.round(lineWidth));
-        int steps = Math.max(1, Math.min((int) (len * 1.25), 600));
-        double nx = -dy / len;
-        double ny = dx / len;
-        int half = lw / 2;
+        float angle = (float) Math.atan2(dy, dx);
+        int iLen = Math.max(1, (int) Math.ceil(len));
+        int halfW = Math.max(0, (Math.round(lineWidth) - 1) / 2);
+        int segments = Math.max(1, Math.min(iLen / 3, 40));
 
-        for (int i = 0; i <= steps; i++) {
-            double t = (double) i / steps;
-            double bx = x1 + dx * t;
-            double by = y1 + dy * t;
-            int color = ColorUtil.interpolateColor(startColor, endColor, (float) t);
-            for (int o = -half; o <= half; o++) {
-                int px = (int) Math.round(bx + nx * o);
-                int py = (int) Math.round(by + ny * o);
-                ctx.fill(px, py, px + 1, py + 1, color);
-            }
+        ctx.getMatrices().pushMatrix();
+        ctx.getMatrices().translate((float) x1, (float) y1);
+        ctx.getMatrices().rotate(angle);
+        for (int i = 0; i < segments; i++) {
+            int sx = iLen * i / segments;
+            int ex = iLen * (i + 1) / segments;
+            float t = (float) i / Math.max(1, segments - 1);
+            int color = ColorUtil.interpolateColor(startColor, endColor, t);
+            ctx.fill(sx, -halfW, ex, halfW + 1, color);
         }
+        ctx.getMatrices().popMatrix();
     }
 
+    /**
+     * Glow line: wider semi-transparent line behind, then crisp main line.
+     */
     public static void drawGlowLine(DrawContext ctx, double x1, double y1, double x2, double y2,
                                     float lineWidth, int color) {
-        int glow = ColorUtil.withAlpha(color, Math.min(110, (color >> 24) & 0xFF));
-        drawSmoothLine(ctx, x1, y1, x2, y2, lineWidth + 2.0f, glow);
+        int alpha = (color >> 24) & 0xFF;
+        int glowColor = ColorUtil.withAlpha(color, Math.min(50, alpha));
+        drawSmoothLine(ctx, x1, y1, x2, y2, lineWidth + 4.0f, glowColor);
         drawSmoothLine(ctx, x1, y1, x2, y2, lineWidth, color);
     }
 
@@ -140,26 +155,33 @@ public final class RenderUtil {
         drawSmoothLine(ctx, x1, y1, x2, y2, lineWidth, color);
     }
 
-    // ─── Blur Simulation ──────────────────────────────────────
+    // ─── Blur (real GPU Gaussian blur) ──────────────────────────
 
     /**
-     * Simulated frosted-glass blur by layering semi-transparent fills.
+     * Apply real GPU blur to a rect area, with a dark tint overlay.
+     * Safely handles "Can only blur once per frame" limitation.
      */
     public static void blurRect(DrawContext ctx, int x, int y, int w, int h, int layers) {
-        for (int i = 0; i < layers; i++) {
-            int alpha = Math.min(255, 30 + i * 15);
-            ctx.fill(x - i, y - i, x + w + i, y + h + i, (alpha << 24) | 0x0D0D14);
+        try {
+            ctx.applyBlur();
+        } catch (IllegalStateException ignored) {
+            // Blur already applied this frame — skip
         }
+        ctx.fill(x, y, x + w, y + h, 0x80080810);
     }
 
     /**
-     * Full-screen blur overlay.
+     * Full-screen GPU blur + dark overlay for frosted glass effect.
+     * Safely handles "Can only blur once per frame" limitation.
      */
     public static void blurBackground(DrawContext ctx, int screenW, int screenH, int intensity) {
-        for (int i = 0; i < intensity; i++) {
-            int alpha = 20 + i * 8;
-            ctx.fill(0, 0, screenW, screenH, (Math.min(alpha, 200) << 24) | 0x08080E);
+        try {
+            ctx.applyBlur();
+        } catch (IllegalStateException ignored) {
+            // Blur already applied this frame — skip
         }
+        int alpha = Math.min(0x60, intensity * 12);
+        ctx.fill(0, 0, screenW, screenH, (alpha << 24) | 0x08080E);
     }
 
     // ─── Player Skin Face ─────────────────────────────────────
@@ -187,18 +209,38 @@ public final class RenderUtil {
     public static void roundedRectSimple(DrawContext ctx, int x, int y, int width, int height,
                                          int radius, int color) {
         if (width <= 0 || height <= 0) return;
-        if (((color >> 24) & 0xFF) == 0) return;
+        int baseAlpha = (color >> 24) & 0xFF;
+        if (baseAlpha == 0) return;
         if (radius <= 0) { ctx.fill(x, y, x + width, y + height, color); return; }
         radius = Math.min(radius, Math.min(width, height) / 2);
+        int rgb = color & 0x00FFFFFF;
+
+        // Body fill: center + left side + right side
         ctx.fill(x + radius, y, x + width - radius, y + height, color);
         ctx.fill(x, y + radius, x + radius, y + height - radius, color);
         ctx.fill(x + width - radius, y + radius, x + width, y + height - radius, color);
+
+        // Corner scanlines with anti-aliased edge pixels
         for (int i = 0; i <= radius; i++) {
-            int offset = (int) (radius - Math.sqrt((double) radius * radius - (double) (radius - i) * (radius - i)));
+            double exact = radius - Math.sqrt((double) radius * radius - (double) (radius - i) * (radius - i));
+            int offset = (int) exact;
+            double frac = exact - offset;
+
+            // Full corner pixels
             ctx.fill(x + offset, y + i, x + radius, y + i + 1, color);
             ctx.fill(x + width - radius, y + i, x + width - offset, y + i + 1, color);
             ctx.fill(x + offset, y + height - i - 1, x + radius, y + height - i, color);
             ctx.fill(x + width - radius, y + height - i - 1, x + width - offset, y + height - i, color);
+
+            // Anti-aliased edge pixel (sub-pixel smooth transition)
+            if (offset > 0 && frac > 0.05) {
+                int aaAlpha = (int) ((1.0 - frac) * baseAlpha);
+                int aaColor = (aaAlpha << 24) | rgb;
+                ctx.fill(x + offset - 1, y + i, x + offset, y + i + 1, aaColor);
+                ctx.fill(x + width - offset, y + i, x + width - offset + 1, y + i + 1, aaColor);
+                ctx.fill(x + offset - 1, y + height - i - 1, x + offset, y + height - i, aaColor);
+                ctx.fill(x + width - offset, y + height - i - 1, x + width - offset + 1, y + height - i, aaColor);
+            }
         }
     }
 
@@ -449,5 +491,57 @@ public final class RenderUtil {
     public static void gradientLine(DrawContext ctx, int x, int y, int width, int height,
                                     int leftColor, int rightColor) {
         horizontalGradient(ctx, x, y, width, height, leftColor, rightColor);
+    }
+
+    // ─── Color Picker Components ──────────────────────────────────
+
+    /**
+     * Draw a horizontal hue bar (rainbow gradient) with a selection indicator.
+     */
+    public static void drawHueBar(DrawContext ctx, int x, int y, int width, int height, float selectedHue) {
+        int strips = Math.min(width, 60);
+        float stripW = (float) width / strips;
+        for (int i = 0; i < strips; i++) {
+            float hue = (float) i / strips;
+            int color = Color.HSBtoRGB(hue, 1f, 1f) | 0xFF000000;
+            int sx = x + Math.round(i * stripW);
+            int ex = (i == strips - 1) ? x + width : x + Math.round((i + 1) * stripW);
+            ctx.fill(sx, y, ex, y + height, color);
+        }
+        // Selection indicator
+        int ix = x + Math.round(selectedHue * (width - 2));
+        ctx.fill(ix - 1, y - 2, ix + 2, y + height + 2, 0xFFFFFFFF);
+        ctx.fill(ix, y - 1, ix + 1, y + height + 1, 0xFF000000);
+    }
+
+    /**
+     * Draw a saturation-brightness picker grid for a given hue value.
+     * X-axis = saturation (0–1), Y-axis = brightness (1–0 top-to-bottom).
+     */
+    public static void drawSBPicker(DrawContext ctx, int x, int y, int width, int height,
+                                     float hue, float selectedSat, float selectedBri) {
+        int cols = Math.min(width / 3, 40);
+        int rows = Math.min(height / 3, 25);
+        float cellW = (float) width / cols;
+        float cellH = (float) height / rows;
+
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                float sat = (float) c / Math.max(1, cols - 1);
+                float bri = 1.0f - (float) r / Math.max(1, rows - 1);
+                int color = Color.HSBtoRGB(hue, sat, bri) | 0xFF000000;
+                int cx1 = x + Math.round(c * cellW);
+                int cy1 = y + Math.round(r * cellH);
+                int cx2 = (c == cols - 1) ? x + width : x + Math.round((c + 1) * cellW);
+                int cy2 = (r == rows - 1) ? y + height : y + Math.round((r + 1) * cellH);
+                ctx.fill(cx1, cy1, cx2, cy2, color);
+            }
+        }
+
+        // Selection crosshair
+        int selX = x + Math.round(selectedSat * (width - 1));
+        int selY = y + Math.round((1.0f - selectedBri) * (height - 1));
+        circleOutline(ctx, selX, selY, 4, 1, 0xFFFFFFFF);
+        circleOutline(ctx, selX, selY, 3, 1, 0xFF000000);
     }
 }

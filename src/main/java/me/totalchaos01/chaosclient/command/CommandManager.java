@@ -22,6 +22,7 @@ public class CommandManager {
         commands.add(new BindCommand());
         commands.add(new FriendCommand());
         commands.add(new ConfigCommand());
+        commands.add(new VClipCommand());
     }
 
     public void handle(String input) {
@@ -54,5 +55,55 @@ public class CommandManager {
 
     public List<Command> getCommands() {
         return commands;
+    }
+
+    /**
+     * Returns tab-completions for the given partial command input (after the dot prefix).
+     * Used by the MixinChatScreen for TAB completion of .commands.
+     */
+    public List<String> getCompletions(String input) {
+        String[] parts = input.split("\\s+", -1);
+        List<String> result = new java.util.ArrayList<>();
+
+        if (parts.length <= 1) {
+            // Complete command names
+            String partial = (parts.length > 0 ? parts[0] : "").toLowerCase();
+            for (Command cmd : commands) {
+                if (cmd.getName().toLowerCase().startsWith(partial)) {
+                    result.add(cmd.getName());
+                }
+                for (String alias : cmd.getAliases()) {
+                    if (alias.toLowerCase().startsWith(partial)) {
+                        result.add(alias);
+                    }
+                }
+            }
+        } else {
+            String cmdName = parts[0].toLowerCase();
+            String partial = parts[parts.length - 1].toLowerCase();
+
+            // Module name completions for toggle/bind
+            if ("toggle".equals(cmdName) || "t".equals(cmdName) || "bind".equals(cmdName) || "b".equals(cmdName)) {
+                if (ChaosClient.getInstance() != null && ChaosClient.getInstance().getModuleManager() != null) {
+                    for (var mod : ChaosClient.getInstance().getModuleManager().getModules()) {
+                        if (mod.getName().toLowerCase().startsWith(partial)) {
+                            result.add(parts[0] + " " + mod.getName());
+                        }
+                    }
+                }
+            }
+            // Subcommand completions
+            else if ("config".equals(cmdName) || "cfg".equals(cmdName)) {
+                for (String s : new String[]{"save", "load"}) {
+                    if (s.startsWith(partial)) result.add(parts[0] + " " + s);
+                }
+            }
+            else if ("friend".equals(cmdName) || "f".equals(cmdName)) {
+                for (String s : new String[]{"add", "remove", "list"}) {
+                    if (s.startsWith(partial)) result.add(parts[0] + " " + s);
+                }
+            }
+        }
+        return result;
     }
 }

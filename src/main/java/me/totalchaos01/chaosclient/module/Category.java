@@ -8,8 +8,8 @@ public enum Category {
     MOVEMENT("Movement"),
     PLAYER("Player"),
     RENDER("Render"),
-    GHOST("Ghost"),
-    OTHER("Other");
+    LEGIT("Legit"),
+    EXPLOITS("Exploits");
 
     private final String displayName;
 

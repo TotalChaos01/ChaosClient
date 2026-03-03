@@ -19,19 +19,26 @@ public class MixinKeyboard {
     private void onKey(long window, int action, KeyInput keyInput, CallbackInfo ci) {
         if (ChaosClient.getInstance() == null) return;
         if (MinecraftClient.getInstance().currentScreen != null) return;
-        if (action != GLFW.GLFW_PRESS) return;
 
         int key = keyInput.key();
         int scanCode = keyInput.scancode();
 
-        // Toggle modules by keybind
-        for (Module module : ChaosClient.getInstance().getModuleManager().getModules()) {
-            if (module.getKeyBind() == key) {
-                module.toggle();
+        if (action == GLFW.GLFW_PRESS) {
+            // Toggle modules by keybind
+            for (Module module : ChaosClient.getInstance().getModuleManager().getModules()) {
+                if (module.getKeyBind() == key) {
+                    module.toggle();
+                }
+            }
+            // Post key event
+            ChaosClient.getInstance().getEventBus().post(new EventKey(key, scanCode));
+        } else if (action == GLFW.GLFW_RELEASE) {
+            // Handle hold-mode key release
+            for (Module module : ChaosClient.getInstance().getModuleManager().getModules()) {
+                if (module.getKeyBind() == key && module.isHoldMode()) {
+                    module.onKeyRelease();
+                }
             }
         }
-
-        // Post key event
-        ChaosClient.getInstance().getEventBus().post(new EventKey(key, scanCode));
     }
 }

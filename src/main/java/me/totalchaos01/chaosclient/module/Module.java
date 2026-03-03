@@ -1,6 +1,7 @@
 package me.totalchaos01.chaosclient.module;
 
 import me.totalchaos01.chaosclient.ChaosClient;
+import me.totalchaos01.chaosclient.notification.NotificationType;
 import me.totalchaos01.chaosclient.setting.Setting;
 import net.minecraft.client.MinecraftClient;
 
@@ -19,6 +20,7 @@ public abstract class Module {
     private final Category category;
     private boolean enabled;
     private int keyBind;
+    private boolean holdMode; // true = hold to activate, false = toggle
     private final boolean hidden;
     private final List<Setting> settings = new ArrayList<>();
 
@@ -57,6 +59,17 @@ public abstract class Module {
             ChaosClient.getInstance().getEventBus().unregister(this);
             onDisable();
         }
+        // Fire notification on toggle
+        try {
+            if (!hidden && ChaosClient.getInstance() != null && ChaosClient.getInstance().getNotificationManager() != null) {
+                ChaosClient.getInstance().getNotificationManager().add(
+                    enabled ? "Включён" : "Выключен",
+                    name,
+                    enabled ? NotificationType.SUCCESS : NotificationType.INFO,
+                    1500
+                );
+            }
+        } catch (Exception ignored) {}
     }
 
     public void setEnabled(boolean state) {
@@ -92,6 +105,23 @@ public abstract class Module {
 
     public void setKeyBind(int keyBind) {
         this.keyBind = keyBind;
+    }
+
+    public boolean isHoldMode() {
+        return holdMode;
+    }
+
+    public void setHoldMode(boolean holdMode) {
+        this.holdMode = holdMode;
+    }
+
+    /**
+     * Called when a key is released — used for hold-mode binding.
+     */
+    public void onKeyRelease() {
+        if (holdMode && enabled) {
+            toggle();
+        }
     }
 
     public boolean isHidden() {

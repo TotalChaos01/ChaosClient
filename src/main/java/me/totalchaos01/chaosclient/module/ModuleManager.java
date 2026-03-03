@@ -5,6 +5,7 @@ import me.totalchaos01.chaosclient.module.impl.movement.*;
 import me.totalchaos01.chaosclient.module.impl.player.*;
 import me.totalchaos01.chaosclient.module.impl.render.*;
 import me.totalchaos01.chaosclient.module.impl.ghost.*;
+import me.totalchaos01.chaosclient.module.impl.exploits.*;
 import me.totalchaos01.chaosclient.module.impl.other.*;
 import me.totalchaos01.chaosclient.setting.Setting;
 
@@ -24,6 +25,11 @@ public class ModuleManager {
         register(new Velocity());
         register(new Criticals());
         register(new AutoTotem());
+        register(new Backtrack());
+        register(new ShieldBreak());
+        register(new AutoShield());
+        register(new AutoBlocking());
+        register(new AutoGapple());
 
         // Movement
         register(new Sprint());
@@ -41,11 +47,14 @@ public class ModuleManager {
         register(new Scaffold());
         register(new ChestStealer());
         register(new Blink());
+        register(new Zoom());
+        register(new NoDelay());
 
-        // Ghost
+        // Legit
         register(new AimAssist());
         register(new AutoClicker());
         register(new Reach());
+        register(new Hitbox());
 
         // Render
         register(new HUD());
@@ -56,8 +65,11 @@ public class ModuleManager {
         register(new Nametags());
         register(new ChestESP());
         register(new NoWeather());
+        register(new TargetHUD());
+        register(new HUDEditor());
 
-        // Other
+        // Exploits
+        register(new ServerCrasher());
         register(new Timer());
         register(new ClientSpoofer());
         register(new Disabler());

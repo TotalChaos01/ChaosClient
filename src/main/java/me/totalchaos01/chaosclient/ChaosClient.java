@@ -5,6 +5,7 @@ import me.totalchaos01.chaosclient.config.ConfigManager;
 import me.totalchaos01.chaosclient.event.EventBus;
 import me.totalchaos01.chaosclient.module.ModuleManager;
 import me.totalchaos01.chaosclient.notification.NotificationManager;
+import me.totalchaos01.chaosclient.ui.hud.HUDManager;
 import net.fabricmc.api.ClientModInitializer;
 import net.minecraft.client.MinecraftClient;
 import org.slf4j.Logger;
@@ -17,7 +18,7 @@ import org.slf4j.LoggerFactory;
 public class ChaosClient implements ClientModInitializer {
 
     public static final String CLIENT_NAME = "ChaosClient";
-    public static final String CLIENT_VERSION = "1.1.1";
+    public static final String CLIENT_VERSION = "1.2.0";
     public static final Logger LOGGER = LoggerFactory.getLogger(CLIENT_NAME);
 
     private static ChaosClient INSTANCE;
@@ -27,6 +28,7 @@ public class ChaosClient implements ClientModInitializer {
     private CommandManager commandManager;
     private ConfigManager configManager;
     private NotificationManager notificationManager;
+    private HUDManager hudManager;
 
     @Override
     public void onInitializeClient() {
@@ -39,6 +41,7 @@ public class ChaosClient implements ClientModInitializer {
         commandManager = new CommandManager();
         configManager = new ConfigManager();
         notificationManager = new NotificationManager();
+        hudManager = new HUDManager();
 
         // Register all modules
         moduleManager.init();
@@ -99,6 +102,10 @@ public class ChaosClient implements ClientModInitializer {
 
     public NotificationManager getNotificationManager() {
         return notificationManager;
+    }
+
+    public HUDManager getHudManager() {
+        return hudManager;
     }
 }
 

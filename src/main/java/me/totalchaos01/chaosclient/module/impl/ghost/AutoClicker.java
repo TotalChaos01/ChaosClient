@@ -10,7 +10,7 @@ import me.totalchaos01.chaosclient.setting.impl.NumberSetting;
 
 import java.util.concurrent.ThreadLocalRandom;
 
-@ModuleInfo(name = "AutoClicker", description = "Automatically clicks", category = Category.GHOST)
+@ModuleInfo(name = "AutoClicker", description = "Automatically clicks", category = Category.LEGIT)
 public class AutoClicker extends Module {
 
     private final NumberSetting minCps = new NumberSetting("Min CPS", 8, 1, 20, 1);

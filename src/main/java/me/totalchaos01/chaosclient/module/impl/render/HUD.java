@@ -28,7 +28,7 @@ import java.util.Map;
  *
  * Ported from Rise Client's IngameGUI.java (774 lines).
  */
-@ModuleInfo(name = "HUD", description = "Rise-style HUD overlay", category = Category.RENDER, hidden = true)
+@ModuleInfo(name = "HUD", description = "In-game HUD overlay", category = Category.RENDER, hidden = true)
 public class HUD extends Module {
 
     private final BooleanSetting arrayList = new BooleanSetting("ArrayList", true);
@@ -37,7 +37,7 @@ public class HUD extends Module {
     private final BooleanSetting fps = new BooleanSetting("FPS", true);
     private final BooleanSetting bps = new BooleanSetting("BPS", false);
     private final BooleanSetting notifications = new BooleanSetting("Notifications", true);
-    private final ModeSetting theme = new ModeSetting("Theme", "Rise", ThemeUtil.getThemeNames());
+    private final ModeSetting theme = new ModeSetting("Theme", "Chaos", ThemeUtil.getThemeNames());
 
     // Animation state — tracks each module's slide-in X position
     private final Map<Module, Float> moduleAnimX = new HashMap<>();
@@ -59,6 +59,10 @@ public class HUD extends Module {
         int screenWidth = mc.getWindow().getScaledWidth();
         int screenHeight = mc.getWindow().getScaledHeight();
 
+        // Ensure HUD manager is initialized
+        var mgr = ChaosClient.getInstance().getHudManager();
+        if (mgr != null) mgr.init();
+
         // ─── Watermark (Rise-style, top-left) ─────────────────
         if (watermark.isEnabled()) {
             renderWatermark(ctx);
@@ -71,24 +75,52 @@ public class HUD extends Module {
 
         // ─── BPS Counter ──────────────────────────────────────
         if (bps.isEnabled()) {
+            float bpsX = 4, bpsY = screenHeight - 34;
+            if (mgr != null) {
+                var el = mgr.get("bps");
+                if (el != null) { bpsX = el.getX(); bpsY = el.getY(); }
+            }
             double dx = mc.player.getX() - mc.player.lastX;
             double dz = mc.player.getZ() - mc.player.lastZ;
             double speed = Math.sqrt(dx * dx + dz * dz) * 20; // blocks per second
             String bpsText = String.format("%.1f b/s", speed);
-            ctx.drawTextWithShadow(mc.textRenderer, bpsText, 4, screenHeight - 34, 0xFFBBBBBB);
+            ctx.drawTextWithShadow(mc.textRenderer, bpsText, (int) bpsX, (int) bpsY, 0xFFBBBBBB);
+            // Update element size for editor
+            if (mgr != null) {
+                var el = mgr.get("bps");
+                if (el != null) { el.setWidth(mc.textRenderer.getWidth(bpsText) + 4); el.setHeight(12); }
+            }
         }
 
         // ─── Coordinates ──────────────────────────────────────
         if (coordinates.isEnabled()) {
+            float coordX = 4, coordY = screenHeight - 14;
+            if (mgr != null) {
+                var el = mgr.get("coordinates");
+                if (el != null) { coordX = el.getX(); coordY = el.getY(); }
+            }
             String coords = String.format("§fXYZ: §b%.1f §f/ §b%.1f §f/ §b%.1f",
                     mc.player.getX(), mc.player.getY(), mc.player.getZ());
-            ctx.drawTextWithShadow(mc.textRenderer, coords, 4, screenHeight - 14, 0xFFFFFFFF);
+            ctx.drawTextWithShadow(mc.textRenderer, coords, (int) coordX, (int) coordY, 0xFFFFFFFF);
+            if (mgr != null) {
+                var el = mgr.get("coordinates");
+                if (el != null) { el.setWidth(mc.textRenderer.getWidth(coords) + 4); el.setHeight(12); }
+            }
         }
 
         // ─── FPS ──────────────────────────────────────────────
         if (fps.isEnabled()) {
+            float fpsX = 4, fpsY = screenHeight - 24;
+            if (mgr != null) {
+                var el = mgr.get("fps");
+                if (el != null) { fpsX = el.getX(); fpsY = el.getY(); }
+            }
             String fpsText = "§fFPS: §a" + mc.getCurrentFps();
-            ctx.drawTextWithShadow(mc.textRenderer, fpsText, 4, screenHeight - 24, 0xFFFFFFFF);
+            ctx.drawTextWithShadow(mc.textRenderer, fpsText, (int) fpsX, (int) fpsY, 0xFFFFFFFF);
+            if (mgr != null) {
+                var el = mgr.get("fps");
+                if (el != null) { el.setWidth(mc.textRenderer.getWidth(fpsText) + 4); el.setHeight(12); }
+            }
         }
 
         // ─── Notifications ────────────────────────────────────
@@ -100,6 +132,20 @@ public class HUD extends Module {
     // ─── Watermark rendering ──────────────────────────────────
 
     private void renderWatermark(DrawContext ctx) {
+        // HUD Editor position offset
+        float offX = 0, offY = 0;
+        try {
+            var mgr = ChaosClient.getInstance().getHudManager();
+            if (mgr != null) {
+                mgr.init();
+                var el = mgr.get("watermark");
+                if (el != null) { offX = el.getX(); offY = el.getY(); }
+            }
+        } catch (Exception ignored) {}
+
+        ctx.getMatrices().pushMatrix();
+        ctx.getMatrices().translate(offX, offY);
+
         String name = ChaosClient.CLIENT_NAME;
         String ver = "v" + ChaosClient.CLIENT_VERSION;
         Color themeColor = ThemeUtil.getThemeColor(0, ThemeType.LOGO, 1);
@@ -140,28 +186,61 @@ public class HUD extends Module {
                 ctx.drawTextWithShadow(mc.textRenderer, "§7" + ver, 4, 15, 0xFF888888);
             }
         }
+
+        ctx.getMatrices().popMatrix();
     }
 
     // ─── ArrayList rendering ──────────────────────────────────
 
     private void renderArrayList(DrawContext ctx, int screenWidth) {
+        int screenHeight = mc.getWindow().getScaledHeight();
+        // Get position from HUD manager
+        float baseX = screenWidth - 120, baseY = 2;
+        var mgr = ChaosClient.getInstance().getHudManager();
+        if (mgr != null) {
+            var el = mgr.get("arraylist");
+            if (el != null) { baseX = el.getX(); baseY = el.getY(); }
+        }
+
         List<Module> enabledModules = ChaosClient.getInstance().getModuleManager().getModules().stream()
                 .filter(Module::isEnabled)
                 .filter(m -> !m.isHidden())
                 .sorted(Comparator.comparingInt((Module m) -> mc.textRenderer.getWidth(getDisplayName(m))).reversed())
                 .toList();
 
-        int y = 2;
+        float y = baseY;
+        float maxWidth = 0;
         String themeMode = theme.getMode();
+        int halfScreen = screenHeight / 2;
+        boolean wrapped = false; // true once list crosses half-screen → start second column
 
         for (int i = 0; i < enabledModules.size(); i++) {
             Module m = enabledModules.get(i);
             String displayName = getDisplayName(m);
             int textWidth = mc.textRenderer.getWidth(displayName);
+            maxWidth = Math.max(maxWidth, textWidth + 6);
+
+            // Wrap to second column on the left side if past half screen
+            if (!wrapped && y + 11 > halfScreen && i > 0) {
+                wrapped = true;
+                y = baseY;
+            }
+
+            // X position: right-aligned from the element's right edge
+            float elWidth = (mgr != null && mgr.get("arraylist") != null ? mgr.get("arraylist").getWidth() : 116);
+            float rightEdge;
+            float targetX;
+            if (wrapped) {
+                // Second column: render to the left of the main column
+                rightEdge = baseX - 4;
+                targetX = rightEdge - textWidth - 4;
+            } else {
+                rightEdge = baseX + elWidth;
+                targetX = rightEdge - textWidth - 4;
+            }
 
             // Animate X position (slide-in from right)
-            float targetX = screenWidth - textWidth - 4;
-            float currentX = moduleAnimX.getOrDefault(m, (float) screenWidth);
+            float currentX = moduleAnimX.getOrDefault(m, targetX + 50);
             currentX = (float) Animate.lerp(currentX, targetX, 0.2);
             moduleAnimX.put(m, currentX);
 
@@ -172,51 +251,55 @@ public class HUD extends Module {
             int color = ColorUtil.toARGB(elementColor);
 
             switch (themeMode) {
-                case "Rise", "Rise Rainbow", "Rise Blend", "Rise 6 Old", "Rise Christmas",
-                     "Rise Cotton Candy", "Rise Sea", "Rise Cool", "Rise Blaze", "Rise Emo",
-                     "Rice", "Classic Revamp" -> {
+                case "Chaos", "Prism", "Aqua Blend", "Sunset", "Crimson",
+                     "Cotton Candy", "Ocean", "Inferno", "Ember", "Shadow",
+                     "Neon", "Classic Revamp" -> {
                     // Rise-style — glow behind text, colored text, side gradient line
                     Color gc = new Color(elementColor.getRed(), elementColor.getGreen(), elementColor.getBlue(), 20);
                     RenderUtil.glow(ctx, x - 3, y - 2, textWidth + 6, 12, 3, gc, 3);
-                    RenderUtil.roundedRectGradientV(ctx, screenWidth - 2, y - 1, 2, 11, 1, color,
+                    RenderUtil.roundedRectGradientV(ctx, (int) rightEdge - 2, (int) y - 1, 2, 11, 1, color,
                             ColorUtil.toARGB(ThemeUtil.getThemeColor((i + 1) * 2f, ThemeType.ARRAYLIST, 1)));
-                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, y, color);
+                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, (int) y, color);
                 }
                 case "Comfort", "Comfort Rainbow" -> {
-                    // Comfort — with background rect
-                    ctx.fill(x - 2, y - 1, screenWidth, y + 10, 0x80000000);
-                    ctx.fill(screenWidth - 2, y - 1, screenWidth, y + 10, color);
-                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, y, color);
+                    ctx.fill(x - 2, (int) y - 1, (int) rightEdge, (int) y + 10, 0x80000000);
+                    ctx.fill((int) rightEdge - 2, (int) y - 1, (int) rightEdge, (int) y + 10, color);
+                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, (int) y, color);
                 }
                 case "Skeet" -> {
-                    // Skeet — dark background, white text with side bar
-                    ctx.fill(x - 3, y - 1, screenWidth, y + 10, 0xE0111111);
-                    ctx.fill(screenWidth - 2, y - 1, screenWidth, y + 10, color);
-                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, y, 0xFFFFFFFF);
+                    ctx.fill(x - 3, (int) y - 1, (int) rightEdge, (int) y + 10, 0xE0111111);
+                    ctx.fill((int) rightEdge - 2, (int) y - 1, (int) rightEdge, (int) y + 10, color);
+                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, (int) y, 0xFFFFFFFF);
                 }
                 case "Never Lose" -> {
-                    // NeverLose — semi-transparent bg with accent line
-                    ctx.fill(x - 3, y - 1, screenWidth, y + 10, 0x901A1A2E);
-                    ctx.fill(screenWidth - 2, y - 1, screenWidth, y + 10, color);
-                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, y, 0xFFDDDDDD);
+                    ctx.fill(x - 3, (int) y - 1, (int) rightEdge, (int) y + 10, 0x901A1A2E);
+                    ctx.fill((int) rightEdge - 2, (int) y - 1, (int) rightEdge, (int) y + 10, color);
+                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, (int) y, 0xFFDDDDDD);
                 }
                 case "One Tap" -> {
-                    // OneTap — minimal, white text
-                    ctx.fill(x - 2, y - 1, screenWidth, y + 10, 0x50000000);
-                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, y, 0xFFFFFFFF);
+                    ctx.fill(x - 2, (int) y - 1, (int) rightEdge, (int) y + 10, 0x50000000);
+                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, (int) y, 0xFFFFFFFF);
                 }
                 case "Minecraft", "Minecraft Rainbow" -> {
-                    // Minecraft — vanilla-like colored text
-                    ctx.fill(x - 2, y - 1, screenWidth, y + 10, 0x80000000);
-                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, y, color);
+                    ctx.fill(x - 2, (int) y - 1, (int) rightEdge, (int) y + 10, 0x80000000);
+                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, (int) y, color);
                 }
                 default -> {
-                    ctx.fill(screenWidth - 2, y - 1, screenWidth, y + 10, color);
-                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, y, color);
+                    ctx.fill((int) rightEdge - 2, (int) y - 1, (int) rightEdge, (int) y + 10, color);
+                    ctx.drawTextWithShadow(mc.textRenderer, displayName, x, (int) y, color);
                 }
             }
 
             y += 11;
+        }
+
+        // Update arraylist element size for HUD editor
+        if (mgr != null) {
+            var el = mgr.get("arraylist");
+            if (el != null) {
+                el.setHeight(Math.max(20, y - baseY));
+                if (maxWidth > 0) el.setWidth(maxWidth + 8);
+            }
         }
 
         // Clean up animation state for disabled modules

@@ -10,6 +10,7 @@ import me.totalchaos01.chaosclient.setting.impl.NumberSetting;
 import me.totalchaos01.chaosclient.ui.clickgui.ClickGuiScreen;
 import me.totalchaos01.chaosclient.util.render.ThemeUtil;
 
+import java.awt.Color;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -66,7 +67,16 @@ public class ConfigManager {
             gui.addProperty("darkMode", ClickGuiScreen.isDarkMode());
             gui.addProperty("shadowEnabled", ClickGuiScreen.isShadowEnabled());
             gui.addProperty("glowEnabled", ClickGuiScreen.isGlowEnabled());
+            gui.addProperty("nameProtect", ClickGuiScreen.isNameProtect());
+            gui.addProperty("baseColor", ThemeUtil.getBaseColor().getRGB());
             root.add("gui", gui);
+
+            // Save HUD element positions
+            try {
+                if (ChaosClient.getInstance().getHudManager() != null) {
+                    root.add("hud", ChaosClient.getInstance().getHudManager().toJson());
+                }
+            } catch (Exception ignored) {}
 
             Files.writeString(configFile, GSON.toJson(root));
             ChaosClient.LOGGER.info("Config saved to {}", configFile);
@@ -97,7 +107,17 @@ public class ConfigManager {
                 if (gui.has("darkMode")) ClickGuiScreen.setDarkMode(gui.get("darkMode").getAsBoolean());
                 if (gui.has("shadowEnabled")) ClickGuiScreen.setShadowEnabled(gui.get("shadowEnabled").getAsBoolean());
                 if (gui.has("glowEnabled")) ClickGuiScreen.setGlowEnabled(gui.get("glowEnabled").getAsBoolean());
+                if (gui.has("nameProtect")) ClickGuiScreen.setNameProtect(gui.get("nameProtect").getAsBoolean());
+                if (gui.has("baseColor")) ThemeUtil.setBaseColor(new Color(gui.get("baseColor").getAsInt(), true));
             }
+
+            // Load HUD element positions
+            try {
+                if (root.has("hud") && ChaosClient.getInstance().getHudManager() != null) {
+                    ChaosClient.getInstance().getHudManager().init();
+                    ChaosClient.getInstance().getHudManager().fromJson(root.getAsJsonObject("hud"));
+                }
+            } catch (Exception ignored) {}
 
             for (Module module : ChaosClient.getInstance().getModuleManager().getModules()) {
                 if (!modules.has(module.getName())) continue;

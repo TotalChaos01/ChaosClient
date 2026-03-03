@@ -97,12 +97,20 @@ public class ChaosMainMenu extends Screen {
         ctx.drawTextWithShadow(client.textRenderer, "\u00A78" + mcVer, 16,
                 (int)(12 + scale * 10 + 28), ColorUtil.withAlpha(0xFF888888, (int)(180 * fade)));
 
+        // Decorative theme line separating logo from buttons
+        int lineY = (int)(height * 0.30f);
+        int lineMargin = (int)(width * 0.25f);
+        int lineAlpha = (int)(40 * fade);
+        RenderUtil.gradientLine(ctx, lineMargin, lineY, width - lineMargin * 2, 1,
+                ColorUtil.withAlpha(ColorUtil.toARGB(themeColor), lineAlpha),
+                ColorUtil.withAlpha(ColorUtil.toARGB(themeColor2), lineAlpha));
+
         // Buttons (with fade-in stagger)
-        float buttonWidth = 210;
-        float buttonHeight = 34;
+        float buttonWidth = 230;
+        float buttonHeight = 36;
         float buttonX = width / 2f - buttonWidth / 2f;
-        float buttonStartY = height * 0.34f;
-        float buttonGap = 40;
+        float buttonStartY = height * 0.35f;
+        float buttonGap = 44;
 
         singleHover = (float) Animate.lerp(singleHover, isInButton(mouseX, mouseY, buttonX, buttonStartY, buttonWidth, buttonHeight) ? 1 : 0, 0.2);
         multiHover = (float) Animate.lerp(multiHover, isInButton(mouseX, mouseY, buttonX, buttonStartY + buttonGap, buttonWidth, buttonHeight) ? 1 : 0, 0.2);
@@ -115,10 +123,10 @@ public class ChaosMainMenu extends Screen {
         float t3 = Math.min(1, (float) (System.currentTimeMillis() - openTime - 300) / 400);
         float t4 = Math.min(1, (float) (System.currentTimeMillis() - openTime - 400) / 400);
 
-        if (t1 > 0) drawButton(ctx, "\u041E\u0434\u0438\u043D\u043E\u0447\u043D\u0430\u044F \u0438\u0433\u0440\u0430", buttonX, buttonStartY, buttonWidth, buttonHeight, singleHover, themeColor, t1);
-        if (t2 > 0) drawButton(ctx, "\u041C\u0443\u043B\u044C\u0442\u0438\u043F\u043B\u0435\u0435\u0440", buttonX, buttonStartY + buttonGap, buttonWidth, buttonHeight, multiHover, themeColor, t2);
-        if (t3 > 0) drawButton(ctx, "\u2699 \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043A\u043B\u0438\u0435\u043D\u0442\u0430", buttonX, buttonStartY + buttonGap * 2, buttonWidth, buttonHeight, settingsHover, themeColor, t3);
-        if (t4 > 0) drawButton(ctx, "\u0412\u044B\u0445\u043E\u0434", buttonX, buttonStartY + buttonGap * 3, buttonWidth, buttonHeight, quitHover, themeColor, t4);
+        if (t1 > 0) drawButton(ctx, "\u25B6  \u041E\u0434\u0438\u043D\u043E\u0447\u043D\u0430\u044F \u0438\u0433\u0440\u0430", buttonX, buttonStartY, buttonWidth, buttonHeight, singleHover, themeColor, t1);
+        if (t2 > 0) drawButton(ctx, "\u2601  \u041C\u0443\u043B\u044C\u0442\u0438\u043F\u043B\u0435\u0435\u0440", buttonX, buttonStartY + buttonGap, buttonWidth, buttonHeight, multiHover, themeColor, t2);
+        if (t3 > 0) drawButton(ctx, "\u2699  \u041D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043A\u043B\u0438\u0435\u043D\u0442\u0430", buttonX, buttonStartY + buttonGap * 2, buttonWidth, buttonHeight, settingsHover, themeColor, t3);
+        if (t4 > 0) drawButton(ctx, "\u2716  \u0412\u044B\u0445\u043E\u0434", buttonX, buttonStartY + buttonGap * 3, buttonWidth, buttonHeight, quitHover, themeColor, t4);
 
         // Settings panel (slides from right)
         if (settingsPanelAnim.getValue() > 0.01) {
@@ -139,19 +147,48 @@ public class ChaosMainMenu extends Screen {
 
     private void drawButton(DrawContext ctx, String text, float x, float y, float w, float h,
                             float hover, Color themeColor, float fadeIn) {
-        int alpha = (int) ((35 + hover * 55) * fadeIn);
-        int bgColor = ColorUtil.withAlpha(ColorUtil.toARGB(themeColor), alpha);
-        int borderAlpha = (int) ((50 + hover * 140) * fadeIn);
-        int borderColor = ColorUtil.withAlpha(ColorUtil.toARGB(themeColor), borderAlpha);
-
         // Slight Y offset for slide-in effect
         float offsetY = (1 - fadeIn) * 15;
+        int iy = (int) (y + offsetY);
+        int ix = (int) x;
+        int iw = (int) w;
+        int ih = (int) h;
 
-        RenderUtil.roundedRectSimple(ctx, (int) x, (int) (y + offsetY), (int) w, (int) h, 10, bgColor);
-        RenderUtil.roundedRectOutline(ctx, (int) x, (int) (y + offsetY), (int) w, (int) h, 10, 1, borderColor);
+        // Shadow behind button
+        int shadowAlpha = (int) (25 * fadeIn);
+        RenderUtil.shadow(ctx, ix, iy + 2, iw, ih, 10, ColorUtil.withAlpha(0xFF000000, shadowAlpha), 6, 1.5);
 
-        int textColor = ColorUtil.withAlpha(ColorUtil.interpolateColor(0xAAFFFFFF, 0xFFFFFFFF, hover), (int) (255 * fadeIn));
-        RenderUtil.drawCenteredText(ctx, text, (int) (x + w / 2), (int) (y + offsetY + h / 2 - 4), textColor);
+        // Background: dark base + subtle theme tint
+        int baseBg = ColorUtil.withAlpha(0xFF0E0F18, (int) (220 * fadeIn));
+        RenderUtil.roundedRectSimple(ctx, ix, iy, iw, ih, 10, baseBg);
+
+        // Theme color overlay on hover
+        int themeARGB = ColorUtil.toARGB(themeColor);
+        int overlayAlpha = (int) ((8 + hover * 45) * fadeIn);
+        RenderUtil.roundedRectSimple(ctx, ix, iy, iw, ih, 10, ColorUtil.withAlpha(themeARGB, overlayAlpha));
+
+        // Top highlight strip for glass effect
+        int highlightAlpha = (int) ((15 + hover * 25) * fadeIn);
+        RenderUtil.roundedRectSimple(ctx, ix + 2, iy + 1, iw - 4, 1, 0,
+                ColorUtil.withAlpha(0xFFFFFFFF, highlightAlpha));
+
+        // Border — gradient outline from theme color
+        int borderAlpha = (int) ((50 + hover * 140) * fadeIn);
+        int borderColor = ColorUtil.withAlpha(themeARGB, borderAlpha);
+        RenderUtil.roundedRectOutline(ctx, ix, iy, iw, ih, 10, 1, borderColor);
+
+        // Inner glow on hover
+        if (hover > 0.05f) {
+            int glowAlpha = (int) (20 * hover * fadeIn);
+            RenderUtil.roundedRectSimple(ctx, ix + 1, iy + 1, iw - 2, ih - 2, 9,
+                    ColorUtil.withAlpha(themeARGB, glowAlpha));
+        }
+
+        // Text with hover brightness
+        int textAlpha = (int) (255 * fadeIn);
+        int textColor = ColorUtil.withAlpha(
+                ColorUtil.interpolateColor(0xFFBBCCDD, 0xFFFFFFFF, hover), textAlpha);
+        RenderUtil.drawCenteredText(ctx, text, (int) (x + w / 2), iy + ih / 2 - 4, textColor);
     }
 
     // --- Settings panel ---
@@ -242,11 +279,11 @@ public class ChaosMainMenu extends Screen {
         double mouseX = click.x(), mouseY = click.y();
         int button = click.button();
 
-        float buttonWidth = 210;
-        float buttonHeight = 32;
+        float buttonWidth = 230;
+        float buttonHeight = 36;
         float buttonX = width / 2f - buttonWidth / 2f;
-        float buttonStartY = height * 0.34f;
-        float buttonGap = 40;
+        float buttonStartY = height * 0.35f;
+        float buttonGap = 44;
 
         if (isInButton(mouseX, mouseY, buttonX, buttonStartY, buttonWidth, buttonHeight)) {
             client.setScreen(new SelectWorldScreen(this));

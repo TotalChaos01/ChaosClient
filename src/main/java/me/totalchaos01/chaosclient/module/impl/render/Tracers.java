@@ -13,15 +13,12 @@ import me.totalchaos01.chaosclient.util.render.ThemeType;
 import me.totalchaos01.chaosclient.util.render.ThemeUtil;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.entity.Entity;
-import net.minecraft.entity.mob.HostileEntity;
-import net.minecraft.entity.passive.PassiveEntity;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Vec3d;
 
 import java.awt.*;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.UUID;
 
 /**
  * Completely redesigned Tracers with smooth gradient lines,
@@ -40,17 +37,12 @@ public class Tracers extends Module {
     private final NumberSetting range = new NumberSetting("Range", 64, 8, 128, 1);
     private final NumberSetting lineWidth = new NumberSetting("Line Width", 1.0, 0.5, 2.5, 0.25);
 
-    // Smoothed screen positions to prevent jitter
-    private final Map<UUID, double[]> smoothedPositions = new HashMap<>();
-    private static final double SMOOTH_FACTOR = 0.35;
-
     public Tracers() {
         addSettings(players, hostileMobs, passiveMobs, distanceColor, themeGradient, glow, range, lineWidth);
     }
 
     @Override
     protected void onDisable() {
-        smoothedPositions.clear();
     }
 
     @EventTarget
@@ -67,6 +59,7 @@ public class Tracers extends Module {
         for (Entity entity : mc.world.getEntities()) {
             if (entity == mc.player) continue;
             if (!isValidTarget(entity)) continue;
+            if (!entity.isAlive()) continue;
 
             double dist = mc.player.distanceTo(entity);
             if (dist > range.getValue()) continue;
@@ -77,13 +70,14 @@ public class Tracers extends Module {
 
     private boolean isValidTarget(Entity entity) {
         if (entity instanceof PlayerEntity && players.isEnabled()) return true;
-        if (entity instanceof HostileEntity && hostileMobs.isEnabled()) return true;
-        if (entity instanceof PassiveEntity && passiveMobs.isEnabled()) return true;
+        if (entity instanceof Monster && hostileMobs.isEnabled()) return true;
+        if (entity instanceof MobEntity && !(entity instanceof Monster) && passiveMobs.isEnabled()) return true;
         return false;
     }
 
     private void renderTracer(DrawContext ctx, Entity entity, float tickDelta,
                               double centerX, double centerY, double dist) {
+        // Use interpolated position for smooth tracking locked to entity
         Vec3d pos = entity.getLerpedPos(tickDelta);
         double entityCenterY = pos.y + entity.getHeight() / 2.0;
 
@@ -91,19 +85,9 @@ public class Tracers extends Module {
         if (screenPos == null || screenPos.length < 3) return;
         if (screenPos[2] < 0.0 || screenPos[2] > 1.0) return;
 
-        // Smooth the screen-space position to reduce jitter
-        UUID uid = entity.getUuid();
-        double[] smoothed = smoothedPositions.get(uid);
-        if (smoothed == null) {
-            smoothed = new double[]{screenPos[0], screenPos[1]};
-            smoothedPositions.put(uid, smoothed);
-        } else {
-            smoothed[0] += (screenPos[0] - smoothed[0]) * SMOOTH_FACTOR;
-            smoothed[1] += (screenPos[1] - smoothed[1]) * SMOOTH_FACTOR;
-        }
-
-        double targetX = smoothed[0];
-        double targetY = smoothed[1];
+        // Direct projection — no smoothing for tight entity lock
+        double targetX = screenPos[0];
+        double targetY = screenPos[1];
 
         // Calculate colors
         float maxRange = (float) range.getValue();

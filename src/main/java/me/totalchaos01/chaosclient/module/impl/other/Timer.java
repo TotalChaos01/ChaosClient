@@ -11,7 +11,7 @@ import net.minecraft.client.render.RenderTickCounter;
 /**
  * Changes the game tick speed (timer speed).
  */
-@ModuleInfo(name = "Timer", description = "Changes game tick speed", category = Category.OTHER)
+@ModuleInfo(name = "Timer", description = "Changes game tick speed", category = Category.EXPLOITS)
 public class Timer extends Module {
 
     private final NumberSetting speed = new NumberSetting("Speed", 2.0, 0.1, 10.0, 0.1);

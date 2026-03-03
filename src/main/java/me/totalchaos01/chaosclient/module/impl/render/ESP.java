@@ -1,5 +1,6 @@
 package me.totalchaos01.chaosclient.module.impl.render;
 
+import me.totalchaos01.chaosclient.ChaosClient;
 import me.totalchaos01.chaosclient.event.EventTarget;
 import me.totalchaos01.chaosclient.event.events.EventRender2D;
 import me.totalchaos01.chaosclient.module.Module;
@@ -15,8 +16,8 @@ import me.totalchaos01.chaosclient.util.render.ThemeUtil;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.mob.HostileEntity;
-import net.minecraft.entity.passive.PassiveEntity;
+import net.minecraft.entity.mob.MobEntity;
+import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
@@ -49,6 +50,10 @@ public class ESP extends Module {
         return mode.getMode();
     }
 
+    public boolean isGlowMode() {
+        return mode.is("Glow");
+    }
+
     @EventTarget
     public void onRender2D(EventRender2D event) {
         if (mc.player == null || mc.world == null) return;
@@ -64,10 +69,10 @@ public class ESP extends Module {
         }
     }
 
-    private boolean isValidTarget(Entity entity) {
+    public boolean isValidTarget(Entity entity) {
         if (entity instanceof PlayerEntity && players.isEnabled()) return true;
-        if (entity instanceof HostileEntity && hostileMobs.isEnabled()) return true;
-        if (entity instanceof PassiveEntity && passiveMobs.isEnabled()) return true;
+        if (entity instanceof Monster && hostileMobs.isEnabled()) return true;
+        if (entity instanceof MobEntity && !(entity instanceof Monster) && passiveMobs.isEnabled()) return true;
         return false;
     }
 
@@ -146,21 +151,19 @@ public class ESP extends Module {
                 drawCorners(ctx, ix, iy, bw, bh, cornerLen, t, themeWithAlpha);
             }
             case "Glow" -> {
-                // Glow effect
-                for (int i = 8; i > 0; i--) {
-                    int alpha = (int) (45 * (1.0 - (double) i / 8));
-                    int glowCol = ColorUtil.withAlpha(themeARGB, alpha);
-                    ctx.fill(ix - i, iy - i, ix + bw + i, iy + bh + i, glowCol);
-                }
-                // Inner fill
-                ctx.fill(ix, iy, ix + bw, iy + bh, 0x20000000);
-                // Core outline
-                drawOutline(ctx, ix, iy, bw, bh, 1, themeWithAlpha);
+                // MC native glow effect handled via MixinEntity.isGlowing()
+                // Just draw a subtle indicator label below
+                return;
             }
         }
 
-        // Health bar on the left side
-        if (healthBar.isEnabled() && entity instanceof LivingEntity living) {
+        // Health bar on the left side (skip for players when Nametags is enabled)
+        boolean nametagsActive = false;
+        if (entity instanceof PlayerEntity) {
+            Module nametags = ChaosClient.getInstance().getModuleManager().getModule("Nametags");
+            nametagsActive = nametags != null && nametags.isEnabled();
+        }
+        if (healthBar.isEnabled() && entity instanceof LivingEntity living && !nametagsActive) {
             float hp = living.getHealth();
             float maxHp = living.getMaxHealth();
             float hpRatio = Math.max(0, Math.min(1, hp / maxHp));
