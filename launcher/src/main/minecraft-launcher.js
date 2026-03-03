@@ -700,15 +700,20 @@ class MinecraftLauncher extends EventEmitter {
     }
 
     async _installClientMod(modsDir) {
-        // Find existing ChaosClient jars in mods folder
+        // Find existing ChaosClient jars in mods folder (exclude sources jars)
         let existingMods = [];
         try {
-            existingMods = fs.readdirSync(modsDir).filter(f => f.startsWith('ChaosClient') && f.endsWith('.jar'));
+            existingMods = fs.readdirSync(modsDir).filter(f => f.startsWith('ChaosClient') && f.endsWith('.jar') && !f.includes('-sources'));
+            // Clean up any -sources.jar that accidentally ended up in mods
+            const sourcesJars = fs.readdirSync(modsDir).filter(f => f.startsWith('ChaosClient') && f.includes('-sources'));
+            for (const sj of sourcesJars) {
+                try { fs.unlinkSync(path.join(modsDir, sj)); this._log('info', `Удалён sources-jar: ${sj}`); } catch (e) { /* ignore */ }
+            }
         } catch (e) { /* ignore */ }
 
         // Check if an update was previously applied (stored in config)
         const updatedModFile = this.store.get('updatedModFile') || null;
-        if (updatedModFile && existingMods.includes(updatedModFile)) {
+        if (updatedModFile && !updatedModFile.includes('-sources') && existingMods.includes(updatedModFile)) {
             const updatedPath = path.join(modsDir, updatedModFile);
             if (fs.existsSync(updatedPath) && fs.statSync(updatedPath).size > 1000) {
                 this._log('info', `ChaosClient мод актуален: ${updatedModFile}`);
@@ -743,7 +748,7 @@ class MinecraftLauncher extends EventEmitter {
             const releasesUrl = 'https://api.github.com/repos/TotalChaos01/ChaosClient/releases/latest';
             const release = await this._fetchJson(releasesUrl);
             if (release?.assets) {
-                const modAsset = release.assets.find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient'));
+                const modAsset = release.assets.find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient') && !a.name.includes('-sources'));
                 if (modAsset) {
                     const ghDest = path.join(modsDir, modAsset.name);
                     // Check if we already have this exact version

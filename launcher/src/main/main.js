@@ -312,7 +312,7 @@ ipcMain.handle('app:applyModUpdate', async (event, assetInfo) => {
         const modsDir = path.join(gameDir, 'mods');
         if (!fs.existsSync(modsDir)) fs.mkdirSync(modsDir, { recursive: true });
 
-        // Remove old ChaosClient jars
+        // Remove old ChaosClient jars (including sources jars)
         const existingMods = fs.readdirSync(modsDir).filter(f => f.startsWith('ChaosClient') && f.endsWith('.jar'));
         for (const old of existingMods) {
             fs.unlinkSync(path.join(modsDir, old));
