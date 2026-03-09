@@ -386,6 +386,128 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         } catch(e) { clog('Ошибка чтения лога: ' + e.message, '#ff2255'); }
     });
+    // ===== BUILDS TAB =====
+    async function loadBuilds() {
+        const list = $('builds-list');
+        if (!list) return;
+        list.innerHTML = '<div class="builds-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка релизов...</div>';
+        try {
+            const releases = await launcher.getReleases();
+            if (!releases || releases.length === 0) {
+                list.innerHTML = '<div class="builds-empty"><i class="fas fa-inbox"></i> Релизы не найдены</div>';
+                return;
+            }
+            list.innerHTML = '';
+            for (const rel of releases) {
+                if (rel.draft) continue;
+                const modAsset = rel.assets.find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient') && !a.name.includes('sources'));
+                const card = document.createElement('div');
+                card.className = 'build-card' + (rel.prerelease ? ' build-pre' : '');
+                const date = rel.publishedAt ? new Date(rel.publishedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+                const versionMatch = rel.tag.match(/v?(\d+\.\d+\.\d+)/);
+                const version = versionMatch ? versionMatch[1] : rel.tag;
+                const downloads = modAsset ? modAsset.downloadCount || 0 : 0;
+
+                let body = (rel.body || '').replace(/^#+\s*/gm, '').replace(/\*\*/g, '').trim();
+                if (body.length > 200) body = body.substring(0, 200) + '...';
+
+                card.innerHTML = `
+                    <div class="build-header">
+                        <div class="build-title-row">
+                            <span class="build-tag">${esc(rel.tag)}</span>
+                            <span class="build-name">${esc(rel.name || rel.tag)}</span>
+                            ${rel.prerelease ? '<span class="build-badge pre">Pre-release</span>' : '<span class="build-badge stable">Stable</span>'}
+                        </div>
+                        <div class="build-meta">
+                            <span><i class="fas fa-calendar"></i> ${date}</span>
+                            ${modAsset ? `<span><i class="fas fa-download"></i> ${downloads}</span>` : ''}
+                        </div>
+                    </div>
+                    ${body ? `<div class="build-body">${esc(body)}</div>` : ''}
+                    <div class="build-assets">
+                        ${modAsset ? `<button class="build-dl-btn" data-url="${modAsset.url}" data-name="${esc(modAsset.name)}" data-tag="${esc(rel.tag)}"><i class="fas fa-download"></i> ${esc(modAsset.name)} (${formatSize(modAsset.size)})</button>` : '<span class="build-no-jar">Нет jar-файла</span>'}
+                    </div>
+                `;
+                list.appendChild(card);
+            }
+            // Attach download handlers
+            list.querySelectorAll('.build-dl-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const url = btn.dataset.url;
+                    const name = btn.dataset.name;
+                    const tag = btn.dataset.tag;
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Загрузка...';
+                    try {
+                        const r = await launcher.installReleaseMod({ name, url, tag });
+                        if (r.success) {
+                            btn.innerHTML = '<i class="fas fa-check"></i> Установлено';
+                            btn.classList.add('build-dl-done');
+                            clog(`Установлен ${name} из ${tag}`, '#00ff88');
+                        } else { throw new Error(r.error); }
+                    } catch(e) {
+                        btn.innerHTML = '<i class="fas fa-times"></i> Ошибка';
+                        clog('Ошибка загрузки билда: ' + e.message, '#ff2255');
+                        setTimeout(() => {
+                            btn.disabled = false;
+                            btn.innerHTML = `<i class="fas fa-download"></i> ${name}`;
+                        }, 3000);
+                    }
+                });
+            });
+        } catch(e) {
+            list.innerHTML = `<div class="builds-empty"><i class="fas fa-exclamation-triangle"></i> Ошибка: ${esc(e.message)}</div>`;
+        }
+    }
+    function formatSize(bytes) {
+        if (!bytes) return '0 B';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    // ===== MOD TOGGLES =====
+    async function initModToggles() {
+        try {
+            const installed = await launcher.getInstalledMods();
+            const toggles = document.querySelectorAll('#mods-toggle-list .toggle-switch input[type="checkbox"]');
+            for (const toggle of toggles) {
+                const modName = toggle.dataset.mod;
+                if (installed[modName]) {
+                    toggle.checked = installed[modName].enabled;
+                }
+                toggle.addEventListener('change', async () => {
+                    const enabled = toggle.checked;
+                    try {
+                        const r = await launcher.toggleMod(modName, enabled);
+                        if (r.success) {
+                            clog(`${modName}: ${enabled ? 'включён' : 'выключен'}`, '#00ff88');
+                        } else {
+                            toggle.checked = !enabled; // revert
+                            clog(`Ошибка переключения ${modName}: ${r.error}`, '#ff2255');
+                        }
+                    } catch(e) {
+                        toggle.checked = !enabled;
+                        clog('Ошибка: ' + e.message, '#ff2255');
+                    }
+                });
+            }
+        } catch(e) { /* ignore - mods not installed yet */ }
+    }
+
+    // Load builds when navigating to builds tab
+    let buildsLoaded = false;
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (btn.dataset.page === 'builds' && !buildsLoaded) {
+                buildsLoaded = true;
+                loadBuilds();
+            }
+        });
+    });
+    // Init mod toggles on load
+    initModToggles();
+
     // ===== HELPERS =====
     function clog(text, color) {
         const lc = $('log-console');

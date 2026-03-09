@@ -246,33 +246,46 @@ ipcMain.handle('app:checkUpdate', async () => {
         const channel = store.get('updateChannel') || 'release';
         const currentVersion = app.getVersion();
 
-        // Detect first install: no versions dir = never launched
         const gameDir = store.get('gameDir') || GAME_DIR;
         const versionsDir = path.join(gameDir, 'versions');
         const modsDir = path.join(gameDir, 'mods');
         const isFirstInstall = !fs.existsSync(versionsDir) || !fs.existsSync(modsDir);
 
-        // Find currently installed mod jar name
+        // Find currently installed mod jar AND extract its version
         let installedModName = null;
+        let installedModVersion = null;
         if (fs.existsSync(modsDir)) {
             const jars = fs.readdirSync(modsDir).filter(f => f.startsWith('ChaosClient') && f.endsWith('.jar') && !f.includes('sources'));
-            if (jars.length > 0) installedModName = jars[0];
+            if (jars.length > 0) {
+                installedModName = jars[0];
+                // Extract version: "ChaosClient-1.4.0.jar" → "1.4.0"
+                const m = installedModName.match(/ChaosClient-(.+)\.jar/);
+                if (m) installedModVersion = m[1];
+            }
         }
 
         if (channel === 'release') {
             const release = await githubFetch('/releases/latest');
             const latestTag = release.tag_name || '';
             const latestVersion = latestTag.replace(/^v/, '');
-            const modAsset = (release.assets || []).find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient'));
+            const modAsset = (release.assets || []).find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient') && !a.name.includes('sources'));
             const launcherAssets = (release.assets || []).filter(a =>
                 a.name.endsWith('.AppImage') || a.name.endsWith('.deb') || a.name.endsWith('.exe')
             );
-            const hasModUpdate = !!modAsset && modAsset.name !== installedModName;
+
+            // FIX: Compare VERSIONS, not filenames.
+            // Old logic: modAsset.name !== installedModName — always triggers on version bump even if already updated
+            // New logic: compare semantic version from jar name with latest release version
+            const hasModUpdate = !!modAsset && latestVersion !== installedModVersion;
             const hasLauncherUpdate = latestVersion !== currentVersion && launcherAssets.length > 0;
+
             return {
                 hasUpdate: hasModUpdate || hasLauncherUpdate,
+                hasModUpdate,
+                hasLauncherUpdate,
                 isFirstInstall,
                 installedModName,
+                installedModVersion,
                 latestVersion,
                 currentVersion,
                 releaseTag: latestTag,
@@ -283,15 +296,17 @@ ipcMain.handle('app:checkUpdate', async () => {
                 launcherAssets: launcherAssets.map(a => ({ name: a.name, size: a.size, url: a.browser_download_url }))
             };
         } else {
-            // Dev channel: check pre-releases or latest commits with artifacts
             const releases = await githubFetch('/releases?per_page=10');
             const preRelease = releases.find(r => r.prerelease);
             if (preRelease) {
-                const modAsset = (preRelease.assets || []).find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient'));
+                const modAsset = (preRelease.assets || []).find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient') && !a.name.includes('sources'));
+                const preVersion = (preRelease.tag_name || '').replace(/^v/, '');
                 return {
-                    hasUpdate: !!modAsset,
-                    latestVersion: (preRelease.tag_name || '').replace(/^v/, ''),
+                    hasUpdate: !!modAsset && preVersion !== installedModVersion,
+                    hasModUpdate: !!modAsset && preVersion !== installedModVersion,
+                    latestVersion: preVersion,
                     currentVersion,
+                    installedModVersion,
                     releaseTag: preRelease.tag_name,
                     releaseName: preRelease.name || preRelease.tag_name,
                     releaseBody: preRelease.body || '',
@@ -403,6 +418,96 @@ ipcMain.handle('app:getNews', async () => {
 ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('app:platform', () => process.platform);
 ipcMain.handle('app:gameDir', () => GAME_DIR);
+
+// ===== Управление модами (toggle) =====
+ipcMain.handle('mods:getInstalled', async () => {
+    try {
+        const gameDir = store.get('gameDir') || GAME_DIR;
+        const modsDir = path.join(gameDir, 'mods');
+        const selectedMods = store.get('selectedMods') || ['sodium', 'lithium'];
+        const knownMods = ['sodium', 'lithium', 'iris', 'lambdynamiclights', 'modmenu'];
+
+        const installed = {};
+        if (fs.existsSync(modsDir)) {
+            const files = fs.readdirSync(modsDir);
+            for (const mod of knownMods) {
+                const found = files.find(f => f.toLowerCase().includes(mod.toLowerCase()) && f.endsWith('.jar'));
+                installed[mod] = {
+                    name: mod,
+                    enabled: selectedMods.includes(mod),
+                    installed: !!found,
+                    fileName: found || null
+                };
+            }
+        } else {
+            for (const mod of knownMods) {
+                installed[mod] = { name: mod, enabled: selectedMods.includes(mod), installed: false, fileName: null };
+            }
+        }
+        return installed;
+    } catch (e) {
+        return {};
+    }
+});
+
+ipcMain.handle('mods:toggle', async (_, modName, enabled) => {
+    try {
+        const selectedMods = store.get('selectedMods') || ['sodium', 'lithium'];
+        let newSelected;
+        if (enabled) {
+            newSelected = [...new Set([...selectedMods, modName])];
+        } else {
+            newSelected = selectedMods.filter(m => m !== modName);
+        }
+        store.set('selectedMods', newSelected);
+
+        // If disabling, rename .jar to .jar.disabled to immediately hide from Fabric
+        const gameDir = store.get('gameDir') || GAME_DIR;
+        const modsDir = path.join(gameDir, 'mods');
+        if (fs.existsSync(modsDir)) {
+            const files = fs.readdirSync(modsDir);
+            if (!enabled) {
+                const jarFile = files.find(f => f.toLowerCase().includes(modName.toLowerCase()) && f.endsWith('.jar') && !f.endsWith('.disabled'));
+                if (jarFile) {
+                    fs.renameSync(path.join(modsDir, jarFile), path.join(modsDir, jarFile + '.disabled'));
+                }
+            } else {
+                const disabledFile = files.find(f => f.toLowerCase().includes(modName.toLowerCase()) && f.endsWith('.jar.disabled'));
+                if (disabledFile) {
+                    fs.renameSync(path.join(modsDir, disabledFile), path.join(modsDir, disabledFile.replace('.disabled', '')));
+                }
+            }
+        }
+
+        return { success: true, selectedMods: newSelected };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+// ===== Установка мода из конкретного релиза =====
+ipcMain.handle('app:installReleaseMod', async (event, assetInfo) => {
+    // assetInfo = { name, url, tag }
+    try {
+        const gameDir = store.get('gameDir') || GAME_DIR;
+        const modsDir = path.join(gameDir, 'mods');
+        if (!fs.existsSync(modsDir)) fs.mkdirSync(modsDir, { recursive: true });
+
+        // Remove old ChaosClient jars
+        const existingMods = fs.readdirSync(modsDir).filter(f => f.startsWith('ChaosClient') && f.endsWith('.jar'));
+        for (const old of existingMods) {
+            fs.unlinkSync(path.join(modsDir, old));
+        }
+
+        const destPath = path.join(modsDir, assetInfo.name);
+        event.sender.send('launch:status', `Загрузка ${assetInfo.name}...`);
+        await mcLauncher._downloadFile(assetInfo.url, destPath);
+        store.set('updatedModFile', assetInfo.name);
+        return { success: true, fileName: assetInfo.name };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
 
 // ===== Самообновление лаунчера =====
 ipcMain.handle('app:selfUpdate', async (event, assetInfo) => {

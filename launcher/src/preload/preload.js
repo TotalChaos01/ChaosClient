@@ -33,13 +33,18 @@ contextBridge.exposeInMainWorld('launcher', {
     getPlatform: () => ipcRenderer.invoke('app:platform'),
     getGameDir: () => ipcRenderer.invoke('app:gameDir'),
 
-    // Обновления
+    // Обновления и билды
     checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
     getNews: () => ipcRenderer.invoke('app:getNews'),
     getReleases: () => ipcRenderer.invoke('app:getReleases'),
     getCommits: () => ipcRenderer.invoke('app:getCommits'),
     selectDevBuild: (build) => ipcRenderer.invoke('app:selectDevBuild', build),
     applyModUpdate: (assetInfo) => ipcRenderer.invoke('app:applyModUpdate', assetInfo),
+    installReleaseMod: (assetInfo) => ipcRenderer.invoke('app:installReleaseMod', assetInfo),
+
+    // Моды — управление стандартными модами
+    getInstalledMods: () => ipcRenderer.invoke('mods:getInstalled'),
+    toggleMod: (modId, enabled) => ipcRenderer.invoke('mods:toggle', modId, enabled),
 
     // Переустановка / очистка
     reinstallClient: () => ipcRenderer.invoke('minecraft:reinstall'),

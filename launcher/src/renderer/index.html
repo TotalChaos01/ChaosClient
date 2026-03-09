@@ -21,7 +21,7 @@
 | |____| | | | (_| | (_) \__ \| |____| | |  __/ | | | |_
  \_____|_| |_|\__,_|\___/|___/ \_____|_|_|\___|_| |_|\__|
             </pre>
-            <div class="boot-ver">v1.3.0 — Fabric 1.21.11</div>
+            <div class="boot-ver">v1.4.0 — Fabric 1.21.11</div>
             <div class="boot-terminal" id="boot-log"></div>
             <div class="boot-bar-row">
                 <span class="boot-spinner" id="boot-spinner">|</span>
@@ -58,12 +58,13 @@
                     <img id="player-avatar" class="avatar" src="" alt="">
                     <div class="profile-info">
                         <input type="text" id="input-username" class="profile-name-input" placeholder="Введите ник..." autocomplete="off" spellcheck="false">
-                        <div class="profile-ver" id="profile-ver">v1.3.0</div>
+                        <div class="profile-ver" id="profile-ver">v1.4.0</div>
                     </div>
                 </div>
                 <div class="nav-group">
                     <div class="nav-label">НАВИГАЦИЯ</div>
                     <button class="nav-btn active" data-page="home"><i class="fas fa-house"></i> Главная</button>
+                    <button class="nav-btn" data-page="builds"><i class="fas fa-box-archive"></i> Билды</button>
                     <button class="nav-btn" data-page="settings"><i class="fas fa-gear"></i> Настройки</button>
                     <button class="nav-btn" data-page="logs"><i class="fas fa-terminal"></i> Консоль</button>
                 </div>
@@ -124,6 +125,15 @@
                     </div>
                 </section>
 
+                <!-- BUILDS -->
+                <section id="page-builds" class="page">
+                    <h1 class="page-title">Билды</h1>
+                    <p class="page-subtitle">Все версии ChaosClient с GitHub Releases</p>
+                    <div class="builds-list" id="builds-list">
+                        <div class="builds-loading"><i class="fas fa-spinner fa-spin"></i> Загрузка релизов...</div>
+                    </div>
+                </section>
+
                 <!-- SETTINGS -->
                 <section id="page-settings" class="page">
                     <h1 class="page-title">Настройки</h1>
@@ -171,6 +181,61 @@
                                 <div class="setting-desc">Удалить и скачать файлы заново</div>
                             </div>
                             <button class="btn-small btn-danger" id="btn-reinstall"><i class="fas fa-trash-can"></i> Переустановить</button>
+                        </div>
+                    </div>
+
+                    <h2 class="section-title"><i class="fas fa-puzzle-piece"></i> Дополнительные моды</h2>
+                    <p class="section-desc">Включение и отключение предустановленных модов</p>
+                    <div class="mods-toggle-list" id="mods-toggle-list">
+                        <div class="mod-toggle-row" data-mod="sodium">
+                            <div class="mod-toggle-info">
+                                <div class="mod-toggle-name">Sodium</div>
+                                <div class="mod-toggle-desc">Оптимизация рендеринга</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" data-mod="sodium" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="mod-toggle-row" data-mod="lithium">
+                            <div class="mod-toggle-info">
+                                <div class="mod-toggle-name">Lithium</div>
+                                <div class="mod-toggle-desc">Оптимизация сервера и мира</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" data-mod="lithium" checked>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="mod-toggle-row" data-mod="iris">
+                            <div class="mod-toggle-info">
+                                <div class="mod-toggle-name">Iris Shaders</div>
+                                <div class="mod-toggle-desc">Поддержка шейдеров</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" data-mod="iris">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="mod-toggle-row" data-mod="lambdynamiclights">
+                            <div class="mod-toggle-info">
+                                <div class="mod-toggle-name">LambDynamicLights</div>
+                                <div class="mod-toggle-desc">Динамическое освещение</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" data-mod="lambdynamiclights">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="mod-toggle-row" data-mod="modmenu">
+                            <div class="mod-toggle-info">
+                                <div class="mod-toggle-name">Mod Menu</div>
+                                <div class="mod-toggle-desc">Меню управления модами</div>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" data-mod="modmenu">
+                                <span class="toggle-slider"></span>
+                            </label>
                         </div>
                     </div>
                 </section>

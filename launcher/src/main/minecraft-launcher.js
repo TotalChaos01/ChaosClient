@@ -711,6 +711,12 @@ class MinecraftLauncher extends EventEmitter {
             }
         } catch (e) { /* ignore */ }
 
+        // Helper: extract version from jar filename "ChaosClient-X.Y.Z.jar" → "X.Y.Z"
+        const extractVersion = (name) => {
+            const m = name.match(/ChaosClient-(.+)\.jar/);
+            return m ? m[1] : null;
+        };
+
         // Check if an update was previously applied (stored in config)
         const updatedModFile = this.store.get('updatedModFile') || null;
         if (updatedModFile && !updatedModFile.includes('-sources') && existingMods.includes(updatedModFile)) {
@@ -728,7 +734,6 @@ class MinecraftLauncher extends EventEmitter {
         // DEV channel: use selected commit build if available
         if (channel === 'dev' && selectedDevBuild && selectedDevBuild.downloadUrl) {
             try {
-                // Remove old jars before installing new one
                 for (const old of existingMods) {
                     try { fs.unlinkSync(path.join(modsDir, old)); } catch (e) { /* ignore */ }
                 }
@@ -751,12 +756,17 @@ class MinecraftLauncher extends EventEmitter {
                 const modAsset = release.assets.find(a => a.name.endsWith('.jar') && a.name.includes('ChaosClient') && !a.name.includes('-sources'));
                 if (modAsset) {
                     const ghDest = path.join(modsDir, modAsset.name);
-                    // Check if we already have this exact version
-                    if (fs.existsSync(ghDest) && fs.statSync(ghDest).size === modAsset.size) {
-                        this._log('info', `ChaosClient мод актуален (${modAsset.name})`);
-                        this.store.set('updatedModFile', modAsset.name);
+                    const latestVersion = extractVersion(modAsset.name);
+                    const installedVersion = existingMods.length > 0 ? extractVersion(existingMods[0]) : null;
+
+                    // FIX: Compare versions instead of file sizes.
+                    // If we already have the same version installed, skip download
+                    if (latestVersion && latestVersion === installedVersion && fs.existsSync(path.join(modsDir, existingMods[0]))) {
+                        this._log('info', `ChaosClient мод актуален (v${latestVersion})`);
+                        this.store.set('updatedModFile', existingMods[0]);
                         return;
                     }
+
                     // Remove old jars before downloading new
                     for (const old of existingMods) {
                         try { fs.unlinkSync(path.join(modsDir, old)); } catch (e) { /* ignore */ }
@@ -779,7 +789,7 @@ class MinecraftLauncher extends EventEmitter {
         }
 
         // Fallback: install from bundled resources (first launch / no internet)
-        const bundledFileName = 'ChaosClient-1.2.0.jar';
+        const bundledFileName = 'ChaosClient-1.4.0.jar';
         const bundledDest = path.join(modsDir, bundledFileName);
         const bundledPaths = [
             path.join(process.resourcesPath || '', bundledFileName),
@@ -790,6 +800,7 @@ class MinecraftLauncher extends EventEmitter {
         for (const srcPath of bundledPaths) {
             if (fs.existsSync(srcPath)) {
                 fs.copyFileSync(srcPath, bundledDest);
+                this.store.set('updatedModFile', bundledFileName);
                 this._log('info', `ChaosClient мод установлен из бандла: ${srcPath}`);
                 return;
             }
@@ -863,11 +874,11 @@ class MinecraftLauncher extends EventEmitter {
         try {
             const files = fs.readdirSync(modsDir);
             for (const file of files) {
-                if (!file.endsWith('.jar')) continue;
+                // Handle both .jar and .jar.disabled files
+                if (!file.endsWith('.jar') && !file.endsWith('.jar.disabled')) continue;
                 const lower = file.toLowerCase();
                 const shouldKeep = keepPatterns.some(p => lower.includes(p));
                 if (!shouldKeep) {
-                    // Check if this is a known mod that is now deselected
                     const allKnownMods = Object.keys(MODRINTH_MODS);
                     const isKnownMod = allKnownMods.some(m => lower.includes(m));
                     if (isKnownMod) {
