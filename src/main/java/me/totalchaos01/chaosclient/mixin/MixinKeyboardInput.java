@@ -27,7 +27,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class MixinKeyboardInput {
 
     @Inject(method = "tick", at = @At("RETURN"))
-    private void chaos$afterInputTick(boolean slowDown, float movementMultiplier, CallbackInfo ci) {
+    private void chaos$afterInputTick(CallbackInfo ci) {
         if (!RotationUtil.isMoveFixActive()) return;
 
         MinecraftClient mc = MinecraftClient.getInstance();
