@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('launcher', {
     // Minecraft
     launch: () => ipcRenderer.invoke('minecraft:launch'),
     getState: () => ipcRenderer.invoke('minecraft:getState'),
+    killGame: () => ipcRenderer.invoke('minecraft:kill'),
+    getLogFile: () => ipcRenderer.invoke('minecraft:getLogFile'),
 
     // Java
     getJavaStatus: () => ipcRenderer.invoke('java:status'),
@@ -53,6 +55,9 @@ contextBridge.exposeInMainWorld('launcher', {
     onGameExit: (cb) => ipcRenderer.on('launch:game-exit', (_, d) => cb(d)),
     onJavaProgress: (cb) => ipcRenderer.on('java:progress', (_, d) => cb(d)),
     onJavaStatus: (cb) => ipcRenderer.on('java:status-msg', (_, m) => cb(m)),
+
+    // Самообновление лаунчера
+    selfUpdate: (assetInfo) => ipcRenderer.invoke('app:selfUpdate', assetInfo),
 
     // Внешние ссылки
     openExternal: (url) => ipcRenderer.send('open:external', url)

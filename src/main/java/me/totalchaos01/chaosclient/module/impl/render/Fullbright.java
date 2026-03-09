@@ -2,7 +2,6 @@ package me.totalchaos01.chaosclient.module.impl.render;
 
 import me.totalchaos01.chaosclient.event.EventTarget;
 import me.totalchaos01.chaosclient.event.events.EventTick;
-import me.totalchaos01.chaosclient.mixin.ISimpleOptionAccessor;
 import me.totalchaos01.chaosclient.module.Category;
 import me.totalchaos01.chaosclient.module.Module;
 import me.totalchaos01.chaosclient.module.ModuleInfo;
@@ -66,9 +65,13 @@ public class Fullbright extends Module {
      * Bypasses SimpleOption validation by setting the raw field value directly.
      * MC 1.21.11 rejects gamma > 1.0 via setValue(), causing ERROR spam.
      */
+    /**
+     * Directly writes to SimpleOption.value via access widener.
+     * Bypasses validation that caps gamma at 1.0 in MC 1.21.11.
+     */
     private void setGammaRaw(double value) {
         try {
-            ((ISimpleOptionAccessor) (Object) mc.options.getGamma()).setRawValue(value);
+            mc.options.getGamma().value = value;
         } catch (Exception ignored) {
             try { mc.options.getGamma().setValue(1.0); } catch (Exception ignored2) {}
         }

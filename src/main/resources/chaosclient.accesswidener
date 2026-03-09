@@ -1,0 +1,66 @@
+accessWidener v2 named
+
+# =====================================================================
+# ChaosClient Access Widener
+# Opens Minecraft internals for direct access without mixin accessors.
+# This gives the "built-in client" level of access to MC fields/methods.
+# =====================================================================
+
+# --- MinecraftClient ---
+# Session (for alt manager)
+accessible field net/minecraft/client/MinecraftClient session Lnet/minecraft/client/session/Session;
+mutable field net/minecraft/client/MinecraftClient session Lnet/minecraft/client/session/Session;
+# Item use cooldown (for TriggerBot / KillAura)
+accessible field net/minecraft/client/MinecraftClient itemUseCooldown I
+mutable field net/minecraft/client/MinecraftClient itemUseCooldown I
+# Attack cooldown method
+accessible method net/minecraft/client/MinecraftClient doAttack ()Z
+
+# --- ClientPlayerEntity ---
+# Last yaw/pitch sent to server (for better rotation spoofing)
+accessible field net/minecraft/client/network/ClientPlayerEntity lastYawClient F
+mutable field net/minecraft/client/network/ClientPlayerEntity lastYawClient F
+accessible field net/minecraft/client/network/ClientPlayerEntity lastPitchClient F
+mutable field net/minecraft/client/network/ClientPlayerEntity lastPitchClient F
+
+# --- ClientConnection ---
+# Raw Netty channel (for packet manipulation, exploits)
+accessible field net/minecraft/network/ClientConnection channel Lio/netty/channel/Channel;
+
+# --- Input ---
+# Movement vector (for MoveFix - direct access to protected field)
+accessible field net/minecraft/client/input/Input movementVector Lnet/minecraft/util/math/Vec2f;
+mutable field net/minecraft/client/input/Input movementVector Lnet/minecraft/util/math/Vec2f;
+# Player input field (already public, but ensure mutable for overwrite)
+accessible field net/minecraft/client/input/Input playerInput Lnet/minecraft/util/PlayerInput;
+mutable field net/minecraft/client/input/Input playerInput Lnet/minecraft/util/PlayerInput;
+
+# --- Entity ---
+# Direct entity position/velocity manipulation
+accessible field net/minecraft/entity/Entity onGround Z
+mutable field net/minecraft/entity/Entity onGround Z
+
+# --- LivingEntity ---
+# Jump ticks, fly/swim toggle
+accessible field net/minecraft/entity/LivingEntity jumping Z
+mutable field net/minecraft/entity/LivingEntity jumping Z
+
+# --- LivingEntity ---
+# Ticks since last attack (for KillAura cooldown management)
+accessible field net/minecraft/entity/LivingEntity ticksSinceLastAttack I
+mutable field net/minecraft/entity/LivingEntity ticksSinceLastAttack I
+
+# --- GameRenderer ---
+accessible method net/minecraft/client/render/GameRenderer getFov (Lnet/minecraft/client/render/Camera;FZ)F
+
+# --- SimpleOption ---
+# Raw value bypass for Fullbright gamma > 1.0
+accessible field net/minecraft/client/option/SimpleOption value Ljava/lang/Object;
+mutable field net/minecraft/client/option/SimpleOption value Ljava/lang/Object;
+
+# --- RenderTickCounter ---
+accessible field net/minecraft/client/render/RenderTickCounter$Dynamic tickProgress F
+mutable field net/minecraft/client/render/RenderTickCounter$Dynamic tickProgress F
+
+# --- WorldRenderer ---
+accessible field net/minecraft/client/render/WorldRenderer entityOutlineFramebuffer Lnet/minecraft/client/gl/Framebuffer;

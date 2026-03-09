@@ -1,0 +1,20 @@
+Deleted Modules Report:
+The following categories have been cleared of cheat modules as per instructions:
+1. Combat:
+   - All modules removed (KillAura, Velocity, AutoClicker, etc.)
+2. Movement:
+   - All modules removed (Fly, Speed, LongJump, etc.)
+   - EXCEPTION: Baritone (kept for pathfinding/bot functionality)
+3. Player:
+   - All modules removed (InvManager, AutoArmor, ChestStealer, etc.)
+   - Legit/Ghost modules removed.
+4. Exploits:
+   - All modules removed (Disabler, Phase, etc.)
+   - EXCEPTION: ServerCrasher (kept as requested)
+5. Ghost:
+   - All modules removed (AimAssist, Reach, etc.)
+Kept Modules:
+- Render: All visual modules (Tracers, ESP, HUD, etc.) are intact.
+- Baritone: Pathfinding automated system.
+- ServerCrasher: Exploit module.
+Note: The cleanup was performed on the source code structure at src/main/java/me/totalchaos01/chaosclient/module/impl.

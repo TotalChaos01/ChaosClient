@@ -143,21 +143,54 @@ ipcMain.handle('minecraft:launch', async (event) => {
 
 ipcMain.handle('minecraft:getState', async () => mcLauncher.getInstallState());
 
+// Убить процесс игры
+ipcMain.handle('minecraft:kill', async () => {
+    try {
+        const pid = mcLauncher.getGamePid();
+        if (pid) {
+            process.kill(pid, 'SIGKILL');
+            return { success: true };
+        }
+        return { success: false, error: 'Процесс не найден' };
+    } catch (e) { return { success: false, error: e.message }; }
+});
+
+// Получить содержимое latest.log
+ipcMain.handle('minecraft:getLogFile', async () => {
+    try {
+        const gameDir = store.get('gameDir') || GAME_DIR;
+        const logPath = path.join(gameDir, 'logs', 'latest.log');
+        if (fs.existsSync(logPath)) {
+            const content = fs.readFileSync(logPath, 'utf8');
+            return { success: true, content, path: logPath };
+        }
+        return { success: false, error: 'Файл логов не найден' };
+    } catch (e) { return { success: false, error: e.message }; }
+});
+
 // Переустановка
 ipcMain.handle('minecraft:reinstall', async () => {
     const gameDir = store.get('gameDir') || GAME_DIR;
-    // Удаляем всё кроме runtime (Java) и logs
     const keepDirs = ['runtime', 'logs'];
     try {
-        if (fs.existsSync(gameDir)) {
-            const entries = fs.readdirSync(gameDir);
-            for (const entry of entries) {
-                if (keepDirs.includes(entry)) continue;
-                const fullPath = path.join(gameDir, entry);
-                fs.rmSync(fullPath, { recursive: true, force: true });
-            }
+        if (!fs.existsSync(gameDir)) {
+            fs.mkdirSync(gameDir, { recursive: true });
+            return { success: true, message: 'Папка создана заново' };
         }
-        return { success: true };
+        const entries = fs.readdirSync(gameDir);
+        let removed = 0;
+        for (const entry of entries) {
+            if (keepDirs.includes(entry)) continue;
+            const fullPath = path.join(gameDir, entry);
+            try {
+                fs.rmSync(fullPath, { recursive: true, force: true });
+                removed++;
+            } catch (e) { /* skip locked files */ }
+        }
+        // Reset store flags
+        store.delete('updatedModFile');
+        store.delete('wizardDone');
+        return { success: true, message: `Удалено ${removed} элементов` };
     } catch (e) { return { success: false, error: e.message }; }
 });
 
@@ -213,6 +246,19 @@ ipcMain.handle('app:checkUpdate', async () => {
         const channel = store.get('updateChannel') || 'release';
         const currentVersion = app.getVersion();
 
+        // Detect first install: no versions dir = never launched
+        const gameDir = store.get('gameDir') || GAME_DIR;
+        const versionsDir = path.join(gameDir, 'versions');
+        const modsDir = path.join(gameDir, 'mods');
+        const isFirstInstall = !fs.existsSync(versionsDir) || !fs.existsSync(modsDir);
+
+        // Find currently installed mod jar name
+        let installedModName = null;
+        if (fs.existsSync(modsDir)) {
+            const jars = fs.readdirSync(modsDir).filter(f => f.startsWith('ChaosClient') && f.endsWith('.jar') && !f.includes('sources'));
+            if (jars.length > 0) installedModName = jars[0];
+        }
+
         if (channel === 'release') {
             const release = await githubFetch('/releases/latest');
             const latestTag = release.tag_name || '';
@@ -221,10 +267,12 @@ ipcMain.handle('app:checkUpdate', async () => {
             const launcherAssets = (release.assets || []).filter(a =>
                 a.name.endsWith('.AppImage') || a.name.endsWith('.deb') || a.name.endsWith('.exe')
             );
-            const hasModUpdate = !!modAsset;
+            const hasModUpdate = !!modAsset && modAsset.name !== installedModName;
             const hasLauncherUpdate = latestVersion !== currentVersion && launcherAssets.length > 0;
             return {
                 hasUpdate: hasModUpdate || hasLauncherUpdate,
+                isFirstInstall,
+                installedModName,
                 latestVersion,
                 currentVersion,
                 releaseTag: latestTag,
@@ -355,6 +403,56 @@ ipcMain.handle('app:getNews', async () => {
 ipcMain.handle('app:version', () => app.getVersion());
 ipcMain.handle('app:platform', () => process.platform);
 ipcMain.handle('app:gameDir', () => GAME_DIR);
+
+// ===== Самообновление лаунчера =====
+ipcMain.handle('app:selfUpdate', async (event, assetInfo) => {
+    // assetInfo = { name, url }
+    try {
+        const currentExe = process.execPath;
+        // For AppImage: use APPIMAGE env var
+        const appImagePath = process.env.APPIMAGE;
+        const targetPath = appImagePath || currentExe;
+
+        if (!targetPath || !fs.existsSync(targetPath)) {
+            return { success: false, error: 'Не удалось определить путь лаунчера' };
+        }
+
+        const tmpPath = targetPath + '.update';
+        event.sender.send('launch:status', 'Загрузка обновления лаунчера...');
+
+        // Download new binary
+        await mcLauncher._downloadFile(assetInfo.url, tmpPath);
+
+        // Replace old with new
+        try {
+            // Backup old
+            const backupPath = targetPath + '.bak';
+            if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath);
+            fs.renameSync(targetPath, backupPath);
+            fs.renameSync(tmpPath, targetPath);
+            // Make executable on Linux
+            if (process.platform !== 'win32') {
+                fs.chmodSync(targetPath, 0o755);
+            }
+            // Clean backup
+            try { fs.unlinkSync(backupPath); } catch(e) {}
+        } catch (e) {
+            // Restore backup
+            const backupPath = targetPath + '.bak';
+            if (fs.existsSync(backupPath)) {
+                try { fs.renameSync(backupPath, targetPath); } catch(e2) {}
+            }
+            return { success: false, error: 'Не удалось заменить файл: ' + e.message };
+        }
+
+        // Restart
+        app.relaunch();
+        app.exit(0);
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
 
 // ===== Установка стандартных настроек игры при первом запуске =====
 function applyDefaultGameSettings() {

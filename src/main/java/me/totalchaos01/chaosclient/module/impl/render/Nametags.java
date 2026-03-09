@@ -1,5 +1,6 @@
 package me.totalchaos01.chaosclient.module.impl.render;
 
+import me.totalchaos01.chaosclient.font.ChaosFont;
 import me.totalchaos01.chaosclient.event.EventTarget;
 import me.totalchaos01.chaosclient.event.events.EventRender2D;
 import me.totalchaos01.chaosclient.module.Module;
@@ -44,13 +45,16 @@ public class Nametags extends Module {
     @EventTarget
     public void onRender2D(EventRender2D event) {
         if (mc.player == null || mc.world == null) return;
+        if (mc.currentScreen instanceof me.totalchaos01.chaosclient.ui.clickgui.ClickGuiScreen) return;
+        if (mc.currentScreen != null && mc.currentScreen.shouldPause()) return;
         DrawContext ctx = event.getDrawContext();
         float tickDelta = event.getTickDelta();
+        double rangeSq = range.getValue() * range.getValue();
 
         for (Entity entity : mc.world.getEntities()) {
             if (!(entity instanceof PlayerEntity player)) continue;
             if (player == mc.player) continue;
-            if (mc.player.distanceTo(player) > range.getValue()) continue;
+            if (mc.player.squaredDistanceTo(player) > rangeSq) continue;
 
             renderNametag(ctx, player, tickDelta);
         }
@@ -61,7 +65,7 @@ public class Nametags extends Module {
         double headY = pos.y + player.getHeight() + 0.3;
 
         double[] screen = RenderUtil.worldToScreen(pos.x, headY, pos.z);
-        if (screen == null) return;
+        if (screen == null || screen.length < 3 || screen[2] < 0 || screen[2] > 1.0) return;
 
         double dist = mc.player.distanceTo(player);
         double dynamicScale = scale.getValue() * Math.max(0.4, Math.min(2.0, 6.0 / Math.max(dist, 1.0)));
@@ -96,7 +100,7 @@ public class Nametags extends Module {
         }
 
         String infoStr = info.toString();
-        int textWidth = mc.textRenderer.getWidth(infoStr);
+        int textWidth = ChaosFont.getWidth(infoStr);
         int faceSize = skinFace.isEnabled() ? 10 : 0;
         int totalWidth = textWidth + faceSize + (faceSize > 0 ? 3 : 0) + 8;
         int totalHeight = healthBar.isEnabled() ? 19 : 14;
@@ -119,7 +123,7 @@ public class Nametags extends Module {
         }
 
         // Name and info text
-        ctx.drawTextWithShadow(mc.textRenderer, infoStr, contentX, contentY + 1, 0xFFFFFFFF);
+        ChaosFont.drawWithShadow(ctx, infoStr, contentX, contentY + 1, 0xFFFFFFFF);
 
         // Health bar
         if (healthBar.isEnabled()) {

@@ -48,6 +48,8 @@ public class Tracers extends Module {
     @EventTarget
     public void onRender2D(EventRender2D event) {
         if (mc.player == null || mc.world == null) return;
+        if (mc.currentScreen instanceof me.totalchaos01.chaosclient.ui.clickgui.ClickGuiScreen) return;
+        if (mc.currentScreen != null && mc.currentScreen.shouldPause()) return;
         DrawContext ctx = event.getDrawContext();
         float tickDelta = event.getTickDelta();
 
@@ -55,16 +57,17 @@ public class Tracers extends Module {
         int screenH = mc.getWindow().getScaledHeight();
         double centerX = screenW / 2.0;
         double centerY = screenH / 2.0;
+        double rangeSq = range.getValue() * range.getValue();
 
         for (Entity entity : mc.world.getEntities()) {
             if (entity == mc.player) continue;
             if (!isValidTarget(entity)) continue;
             if (!entity.isAlive()) continue;
 
-            double dist = mc.player.distanceTo(entity);
-            if (dist > range.getValue()) continue;
+            double distSq = mc.player.squaredDistanceTo(entity);
+            if (distSq > rangeSq) continue;
 
-            renderTracer(ctx, entity, tickDelta, centerX, centerY, dist);
+            renderTracer(ctx, entity, tickDelta, centerX, centerY, Math.sqrt(distSq));
         }
     }
 

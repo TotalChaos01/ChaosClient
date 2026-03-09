@@ -1,12 +1,13 @@
 package me.totalchaos01.chaosclient.module.impl.render;
 
+import me.totalchaos01.chaosclient.font.ChaosFont;
 import me.totalchaos01.chaosclient.ChaosClient;
 import me.totalchaos01.chaosclient.event.EventTarget;
 import me.totalchaos01.chaosclient.event.events.EventRender2D;
 import me.totalchaos01.chaosclient.module.Category;
 import me.totalchaos01.chaosclient.module.Module;
 import me.totalchaos01.chaosclient.module.ModuleInfo;
-import me.totalchaos01.chaosclient.module.impl.combat.KillAura;
+// import me.totalchaos01.chaosclient.module.impl.combat.KillAura;
 import me.totalchaos01.chaosclient.util.render.Animate;
 import me.totalchaos01.chaosclient.util.render.ColorUtil;
 import me.totalchaos01.chaosclient.util.render.RenderUtil;
@@ -48,11 +49,11 @@ public class TargetHUD extends Module {
         // --- Find target ---
         LivingEntity newTarget = null;
 
-        // 1. Check KillAura target
-        KillAura killAura = ChaosClient.getInstance().getModuleManager().getModule(KillAura.class);
-        if (killAura != null && killAura.isEnabled() && killAura.getCurrentTarget() != null) {
-            newTarget = killAura.getCurrentTarget();
-        }
+        // 1. Check KillAura target (Removed)
+        // KillAura killAura = ChaosClient.getInstance().getModuleManager().getModule(KillAura.class);
+        // if (killAura != null && killAura.isEnabled() && killAura.getCurrentTarget() != null) {
+        //     newTarget = killAura.getCurrentTarget();
+        // }
 
         // 2. Check crosshair target
         if (newTarget == null && mc.targetedEntity instanceof LivingEntity living && living.isAlive()) {
@@ -136,7 +137,7 @@ public class TargetHUD extends Module {
             // Entity icon placeholder
             RenderUtil.roundedRectSimple(ctx, faceX - 1, faceY - 1, faceSize + 2, faceSize + 2, 4,
                     ColorUtil.withAlpha(0xFF1A1A2E, alpha));
-            ctx.drawTextWithShadow(mc.textRenderer, "\u2666",
+            ChaosFont.drawWithShadow(ctx, "\u2666",
                     faceX + faceSize / 2 - 3, faceY + faceSize / 2 - 4,
                     ColorUtil.withAlpha(themeARGB, alpha));
         }
@@ -144,7 +145,7 @@ public class TargetHUD extends Module {
         // --- Target name ---
         String name = target.getName().getString();
         int textX = faceX + faceSize + 6;
-        ctx.drawTextWithShadow(mc.textRenderer, name, textX, y + 6,
+        ChaosFont.drawWithShadow(ctx, name, textX, y + 6,
                 ColorUtil.withAlpha(0xFFFFFFFF, alpha));
 
         // --- Health bar ---
@@ -191,14 +192,14 @@ public class TargetHUD extends Module {
         String hpText = String.format("%.1f", hp);
         if (absorption > 0) hpText += String.format(" +%.0f", absorption);
         hpText += String.format(" / %.0f", maxHp);
-        ctx.drawTextWithShadow(mc.textRenderer, hpText, barX, barY + barH + 3,
+        ChaosFont.drawWithShadow(ctx, hpText, barX, barY + barH + 3,
                 ColorUtil.withAlpha(0xFFAAAAAA, alpha));
 
         // --- Distance ---
         double dist = mc.player.distanceTo(target);
         String distText = String.format("%.1fm", dist);
-        int distW = mc.textRenderer.getWidth(distText);
-        ctx.drawTextWithShadow(mc.textRenderer, distText, x + PANEL_W - distW - 6, barY + barH + 3,
+        int distW = ChaosFont.getWidth(distText);
+        ChaosFont.drawWithShadow(ctx, distText, x + PANEL_W - distW - 6, barY + barH + 3,
                 ColorUtil.withAlpha(0xFF888888, alpha));
     }
 

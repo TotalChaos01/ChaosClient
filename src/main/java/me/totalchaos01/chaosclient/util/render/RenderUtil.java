@@ -1,5 +1,6 @@
 package me.totalchaos01.chaosclient.util.render;
 
+import me.totalchaos01.chaosclient.font.ChaosFont;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -33,19 +34,25 @@ public final class RenderUtil {
     // ─── Matrix capture for world-to-screen ───────────────────
 
     public static void captureMatrices() {
+        captureMatrices(1.0f);
+    }
+
+    public static void captureMatrices(float tickDelta) {
         try {
             if (mc.gameRenderer == null || mc.options == null) return;
             Camera camera = mc.gameRenderer.getCamera();
             if (camera == null) return;
 
-            // Build view matrix from camera rotation quaternion.
-            // camera.getRotation() gives world->camera orientation;
-            // conjugate (inverse for unit quaternions) gives the view transform.
+            // Build view matrix from camera rotation
             Quaternionf invRot = new Quaternionf(camera.getRotation()).conjugate();
             savedModelView = new Matrix4f().rotation(invRot);
 
-            savedProjection = mc.gameRenderer.getBasicProjectionMatrix(
-                    mc.options.getFov().getValue());
+            // Build projection matrix from current FOV
+            // In 1.21.11 RenderSystem no longer exposes a Matrix4f projection getter,
+            // so we reconstruct from the game renderer's FOV setting
+            float fov = mc.options.getFov().getValue().floatValue();
+            savedProjection = mc.gameRenderer.getBasicProjectionMatrix(fov);
+
             savedCameraPos = camera.getCameraPos();
         } catch (Exception ignored) {
             savedModelView = null;
@@ -56,10 +63,11 @@ public final class RenderUtil {
 
     public static double[] worldToScreen(double wx, double wy, double wz) {
         if (savedModelView == null || savedProjection == null || savedCameraPos == null) return null;
+
         Vec3d camPos = savedCameraPos;
-        float relX = (float)(wx - camPos.x);
-        float relY = (float)(wy - camPos.y);
-        float relZ = (float)(wz - camPos.z);
+        float relX = (float) (wx - camPos.x);
+        float relY = (float) (wy - camPos.y);
+        float relZ = (float) (wz - camPos.z);
         Vector4f pos = new Vector4f(relX, relY, relZ, 1.0f);
         pos.mul(savedModelView);
         pos.mul(savedProjection);
@@ -411,11 +419,12 @@ public final class RenderUtil {
 
     public static void glow(DrawContext ctx, double x, double y, double width, double height,
                             double radius, Color glowColor, int intensity) {
-        int layers = Math.min(intensity, 3);
+        int scaledIntensity = Math.max(1, (int) Math.round(intensity * ThemeUtil.getGlowIntensity()));
+        int layers = Math.min(scaledIntensity, 6);
         for (int i = layers; i > 0; i--) {
             int expand = (int) (i * 2.0);
             double progress = (double) i / layers;
-            int alpha = (int) (glowColor.getAlpha() * (1.0 - progress * progress) * 0.25);
+            int alpha = (int) (glowColor.getAlpha() * (1.0 - progress * progress) * 0.25 * ThemeUtil.getGlowIntensity());
             if (alpha <= 0) continue;
             int color = (alpha << 24) | (glowColor.getRGB() & 0x00FFFFFF);
             roundedRectSimple(ctx, (int) (x - expand), (int) (y - expand),
@@ -474,7 +483,7 @@ public final class RenderUtil {
     // ─── Text Helpers ─────────────────────────────────────────
 
     public static void drawCenteredText(DrawContext ctx, String text, int centerX, int y, int color) {
-        ctx.drawCenteredTextWithShadow(mc.textRenderer, text, centerX, y, color);
+        ctx.drawCenteredTextWithShadow(ChaosFont.renderer(), text, centerX, y, color);
     }
 
     public static void drawGradientText(DrawContext ctx, String text, int x, int y,
@@ -482,9 +491,9 @@ public final class RenderUtil {
         int drawX = x;
         for (int i = 0; i < text.length(); i++) {
             Color charColor = ThemeUtil.getThemeColor(baseOffset + i * offsetStep, ThemeType.ARRAYLIST, 1);
-            ctx.drawTextWithShadow(mc.textRenderer, String.valueOf(text.charAt(i)), drawX, y,
+            ChaosFont.drawWithShadow(ctx, String.valueOf(text.charAt(i)), drawX, y,
                     ColorUtil.toARGB(charColor));
-            drawX += mc.textRenderer.getWidth(String.valueOf(text.charAt(i)));
+            drawX += ChaosFont.getWidth(String.valueOf(text.charAt(i)));
         }
     }
 

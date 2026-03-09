@@ -1,5 +1,6 @@
 package me.totalchaos01.chaosclient.mixin;
 
+import me.totalchaos01.chaosclient.font.ChaosFont;
 import me.totalchaos01.chaosclient.ChaosClient;
 import me.totalchaos01.chaosclient.util.render.ColorUtil;
 import me.totalchaos01.chaosclient.util.render.RenderUtil;
@@ -91,8 +92,8 @@ public abstract class MixinScreen {
 
         // Client branding bottom-right
         String brand = ChaosClient.CLIENT_NAME + " v" + ChaosClient.CLIENT_VERSION;
-        int bw = mc.textRenderer.getWidth(brand);
-        ctx.drawTextWithShadow(mc.textRenderer, brand, w - bw - 6, h - 12,
+        int bw = ChaosFont.getWidth(brand);
+        ChaosFont.drawWithShadow(ctx, brand, w - bw - 6, h - 12,
                 ColorUtil.withAlpha(accent, 120));
 
         // Corner decorations

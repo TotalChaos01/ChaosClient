@@ -13,8 +13,10 @@ import java.awt.*;
 public final class ThemeUtil {
 
     private static String currentTheme = "Chaos";
-    private static Color baseColor = new Color(147, 51, 234); // Purple — default ChaosClient color
+    private static Color baseColor = new Color(147, 51, 234);
     private static long lastUpdate = 0;
+    private static float animationSpeed = 1.0f;
+    private static float glowIntensity = 1.0f;
 
     // Preset blend pair
     private static final Color BLEND_C1 = new Color(71, 148, 253);
@@ -90,7 +92,8 @@ public final class ThemeUtil {
 
         colorOffset *= offsetMultiplier;
 
-        double timer = (System.currentTimeMillis() / 1E+8 * timeMultiplier) * 4E+5;
+        float speed = Math.max(0.05f, animationSpeed);
+        double timer = (System.currentTimeMillis() / 1E+8 * timeMultiplier * speed) * 4E+5;
         double factor = (Math.sin(timer + colorOffset * 0.55f) + 1) * 0.5f;
 
         return switch (type) {
@@ -156,6 +159,22 @@ public final class ThemeUtil {
     }
 
     // ─── Convenience ──────────────────────────────────────────
+
+    public static float getAnimationSpeed() {
+        return animationSpeed;
+    }
+
+    public static void setAnimationSpeed(float speed) {
+        animationSpeed = Math.max(0.05f, Math.min(3.0f, speed));
+    }
+
+    public static float getGlowIntensity() {
+        return glowIntensity;
+    }
+
+    public static void setGlowIntensity(float intensity) {
+        glowIntensity = Math.max(0.0f, Math.min(2.0f, intensity));
+    }
 
     public static Color getBaseColor() {
         return baseColor;

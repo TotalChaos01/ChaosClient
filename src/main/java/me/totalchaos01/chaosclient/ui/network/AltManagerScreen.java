@@ -1,6 +1,5 @@
 package me.totalchaos01.chaosclient.ui.network;
 
-import me.totalchaos01.chaosclient.mixin.IMinecraftClientAccessor;
 import me.totalchaos01.chaosclient.util.render.RenderUtil;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -53,7 +52,7 @@ public class AltManagerScreen extends Screen {
                         Optional.empty(),
                         Optional.empty()
                 );
-                ((IMinecraftClientAccessor) this.client).setSession(newSession);
+                this.client.session = newSession;
                 statusMessage = "§aУспешно! Ник: " + username;
                 statusColor = 0xFF55FF55;
             } catch (Exception e) {

@@ -1,4 +1,5 @@
 package me.totalchaos01.chaosclient.notification;
+import me.totalchaos01.chaosclient.font.ChaosFont;
 
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
@@ -21,7 +22,7 @@ public class NotificationManager {
 
     public void add(String message, NotificationType type) {
         // Duration scales with message length (Rise-style)
-        long duration = Math.max(2000, mc.textRenderer.getWidth(message) * 30L);
+        long duration = Math.max(2000, ChaosFont.getWidth(message) * 30L);
         add("ChaosClient", message, type, duration);
     }
 

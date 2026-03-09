@@ -6,10 +6,7 @@ build/
 .kotlin
 
 ### IntelliJ IDEA ###
-.idea/modules.xml
-.idea/jarRepositories.xml
-.idea/compiler.xml
-.idea/libraries/
+.idea/
 *.iws
 *.iml
 *.ipr
@@ -51,7 +48,14 @@ launcher/package-lock.json
 ### Rise source (external) ###
 rise-main/
 
-need decompile
+### LiquidBounce reference copy (114 MB) ###
+LiquidBounce/
+
+### Decompile outputs ###
+need decompile/
+
+### Stray files ###
+вставленный файл.png
 
 ### Bundle upload scripts (contain tokens) ###
 upload-bundle*.sh
@@ -67,3 +71,8 @@ launcher/squashfs-root/
 launcher/patch_clickgui.py
 launcher/patch_html.py
 chaosclient-bundle-*.zip
+
+### Dev notes / temp files ###
+promt.txt
+removed_modules.txt
+*.new

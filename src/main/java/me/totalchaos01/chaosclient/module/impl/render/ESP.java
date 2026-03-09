@@ -1,5 +1,6 @@
 package me.totalchaos01.chaosclient.module.impl.render;
 
+import me.totalchaos01.chaosclient.font.ChaosFont;
 import me.totalchaos01.chaosclient.ChaosClient;
 import me.totalchaos01.chaosclient.event.EventTarget;
 import me.totalchaos01.chaosclient.event.events.EventRender2D;
@@ -19,7 +20,6 @@ import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.mob.MobEntity;
 import net.minecraft.entity.mob.Monster;
 import net.minecraft.entity.player.PlayerEntity;
-import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
 import java.awt.*;
@@ -57,13 +57,16 @@ public class ESP extends Module {
     @EventTarget
     public void onRender2D(EventRender2D event) {
         if (mc.player == null || mc.world == null) return;
+        if (mc.currentScreen instanceof me.totalchaos01.chaosclient.ui.clickgui.ClickGuiScreen) return;
+        if (mc.currentScreen != null && mc.currentScreen.shouldPause()) return;
         DrawContext ctx = event.getDrawContext();
         float tickDelta = event.getTickDelta();
+        double rangeSq = range.getValue() * range.getValue();
 
         for (Entity entity : mc.world.getEntities()) {
             if (entity == mc.player) continue;
             if (!isValidTarget(entity)) continue;
-            if (mc.player.distanceTo(entity) > range.getValue()) continue;
+            if (mc.player.squaredDistanceTo(entity) > rangeSq) continue;
 
             renderEntityESP(ctx, entity, tickDelta);
         }
@@ -77,41 +80,29 @@ public class ESP extends Module {
     }
 
     private void renderEntityESP(DrawContext ctx, Entity entity, float tickDelta) {
+        // Use interpolated position for smooth rendering
         Vec3d pos = entity.getLerpedPos(tickDelta);
-        Box bb = entity.getBoundingBox();
-        double halfW = (bb.maxX - bb.minX) / 2.0;
-        double height = bb.maxY - bb.minY;
+        // Compute interpolated bounding box centered on lerped position
+        float w = entity.getWidth() / 2.0f;
+        float h = entity.getHeight();
 
-        // Project 8 corners to screen space
-        double[][] corners = {
-                {pos.x - halfW, pos.y, pos.z - halfW},
-                {pos.x + halfW, pos.y, pos.z - halfW},
-                {pos.x - halfW, pos.y, pos.z + halfW},
-                {pos.x + halfW, pos.y, pos.z + halfW},
-                {pos.x - halfW, pos.y + height, pos.z - halfW},
-                {pos.x + halfW, pos.y + height, pos.z - halfW},
-                {pos.x - halfW, pos.y + height, pos.z + halfW},
-                {pos.x + halfW, pos.y + height, pos.z + halfW},
-        };
-
-        double minX = Double.MAX_VALUE, minY = Double.MAX_VALUE;
-        double maxX = -Double.MAX_VALUE, maxY = -Double.MAX_VALUE;
+        // Project 8 corners of interpolated BB to screen space
+        double[] bounds = {Double.MAX_VALUE, Double.MAX_VALUE, -Double.MAX_VALUE, -Double.MAX_VALUE};
         int visibleCount = 0;
 
-        for (double[] corner : corners) {
-            double[] screen = RenderUtil.worldToScreen(corner[0], corner[1], corner[2]);
-            if (screen == null || screen.length < 3 || screen[2] < 0 || screen[2] > 1.0) continue;
-            visibleCount++;
-            minX = Math.min(minX, screen[0]);
-            minY = Math.min(minY, screen[1]);
-            maxX = Math.max(maxX, screen[0]);
-            maxY = Math.max(maxY, screen[1]);
-        }
+        visibleCount += projectCorner(pos.x - w, pos.y,     pos.z - w, bounds) ? 1 : 0;
+        visibleCount += projectCorner(pos.x + w, pos.y,     pos.z - w, bounds) ? 1 : 0;
+        visibleCount += projectCorner(pos.x - w, pos.y,     pos.z + w, bounds) ? 1 : 0;
+        visibleCount += projectCorner(pos.x + w, pos.y,     pos.z + w, bounds) ? 1 : 0;
+        visibleCount += projectCorner(pos.x - w, pos.y + h, pos.z - w, bounds) ? 1 : 0;
+        visibleCount += projectCorner(pos.x + w, pos.y + h, pos.z - w, bounds) ? 1 : 0;
+        visibleCount += projectCorner(pos.x - w, pos.y + h, pos.z + w, bounds) ? 1 : 0;
+        visibleCount += projectCorner(pos.x + w, pos.y + h, pos.z + w, bounds) ? 1 : 0;
 
         if (visibleCount < 2) return;
 
-        int ix = (int) minX, iy = (int) minY;
-        int bw = (int) (maxX - minX), bh = (int) (maxY - minY);
+        int ix = (int) bounds[0], iy = (int) bounds[1];
+        int bw = (int) (bounds[2] - bounds[0]), bh = (int) (bounds[3] - bounds[1]);
         if (bw < 2 || bh < 2) return;
 
         // Get theme color
@@ -132,22 +123,16 @@ public class ESP extends Module {
                 drawOutline(ctx, ix - 2, iy - 2, bw + 4, bh + 4, 1, glowCol);
             }
             case "Box" -> {
-                // Black outline behind
                 drawOutline(ctx, ix - 1, iy - 1, bw + 2, bh + 2, 1, 0xAA000000);
-                // Semi-transparent fill
                 ctx.fill(ix, iy, ix + bw, iy + bh, bgColor);
-                // Themed outline
                 drawOutline(ctx, ix, iy, bw, bh, t, themeWithAlpha);
-                // Subtle inner shadow line
                 if (bw > 4 && bh > 4) {
                     drawOutline(ctx, ix + 1, iy + 1, bw - 2, bh - 2, 1, 0x30000000);
                 }
             }
             case "Corner" -> {
                 int cornerLen = Math.max(4, Math.min(bw, bh) / 4);
-                // Black outline behind corners for contrast
                 drawCorners(ctx, ix - 1, iy - 1, bw + 2, bh + 2, cornerLen + 1, 1, 0xAA000000);
-                // Themed corners
                 drawCorners(ctx, ix, iy, bw, bh, cornerLen, t, themeWithAlpha);
             }
             case "Glow" -> {
@@ -173,11 +158,8 @@ public class ESP extends Module {
             int barHeight = bh;
             int filledHeight = (int) (barHeight * hpRatio);
 
-            // Background
             ctx.fill(barX - 1, iy - 1, barX + barWidth + 1, iy + barHeight + 1, 0xAA000000);
-            // Empty bar
             ctx.fill(barX, iy, barX + barWidth, iy + barHeight, 0xFF1A1A1A);
-            // Filled bar (green to red gradient)
             int healthColor = getHealthColor(hpRatio);
             if (filledHeight > 0) {
                 ctx.fill(barX, iy + barHeight - filledHeight, barX + barWidth, iy + barHeight, healthColor);
@@ -188,13 +170,13 @@ public class ESP extends Module {
         if (distanceText.isEnabled()) {
             double dist = mc.player.distanceTo(entity);
             String distStr = String.format("%.1fm", dist);
-            int textWidth = mc.textRenderer.getWidth(distStr);
+            int textWidth = ChaosFont.getWidth(distStr);
             int textX = ix + (bw - textWidth) / 2;
             int textY = iy + bh + 3;
 
             // Background for text
             RenderUtil.roundedRectSimple(ctx, textX - 3, textY - 1, textWidth + 6, 11, 3, 0xCC000000);
-            ctx.drawTextWithShadow(mc.textRenderer, distStr, textX, textY, 0xFFCCCCCC);
+            ChaosFont.drawWithShadow(ctx, distStr, textX, textY, 0xFFCCCCCC);
         }
     }
 
@@ -224,5 +206,15 @@ public class ESP extends Module {
         int r = (int) (255 * (1.0f - ratio));
         int g = (int) (255 * ratio);
         return 0xFF000000 | (r << 16) | (g << 8);
+    }
+
+    private boolean projectCorner(double wx, double wy, double wz, double[] bounds) {
+        double[] screen = RenderUtil.worldToScreen(wx, wy, wz);
+        if (screen == null || screen.length < 3 || screen[2] < 0 || screen[2] > 1.0) return false;
+        bounds[0] = Math.min(bounds[0], screen[0]);
+        bounds[1] = Math.min(bounds[1], screen[1]);
+        bounds[2] = Math.max(bounds[2], screen[0]);
+        bounds[3] = Math.max(bounds[3], screen[1]);
+        return true;
     }
 }

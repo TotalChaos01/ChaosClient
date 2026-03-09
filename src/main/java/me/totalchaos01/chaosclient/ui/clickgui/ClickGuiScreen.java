@@ -12,6 +12,7 @@ import me.totalchaos01.chaosclient.util.render.ColorUtil;
 import me.totalchaos01.chaosclient.util.render.RenderUtil;
 import me.totalchaos01.chaosclient.util.render.ThemeType;
 import me.totalchaos01.chaosclient.util.render.ThemeUtil;
+import me.totalchaos01.chaosclient.ui.hud.HUDEditorScreen;
 import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
@@ -119,12 +120,15 @@ public class ClickGuiScreen extends Screen {
             winX = this.width / 2f - winW / 2f;
             winY = this.height / 2f - winH / 2f;
         }
+        // Sync UI cache with global theme runtime values
+        gradientSpeed = ThemeUtil.getAnimationSpeed();
+        glowIntensity = ThemeUtil.getGlowIntensity();
         updateColors();
     }
 
     private void updateColors() {
-        Color theme = ThemeUtil.getThemeColor(0, ThemeType.GENERAL, gradientSpeed);
-        Color theme2 = ThemeUtil.getThemeColor(5, ThemeType.GENERAL, gradientSpeed);
+        Color theme = ThemeUtil.getThemeColor(0, ThemeType.GENERAL, ThemeUtil.getAnimationSpeed());
+        Color theme2 = ThemeUtil.getThemeColor(5, ThemeType.GENERAL, ThemeUtil.getAnimationSpeed());
         colorAccent = ColorUtil.toARGB(theme);
         colorAccent2 = ColorUtil.toARGB(theme2);
 
@@ -254,8 +258,9 @@ public class ClickGuiScreen extends Screen {
         if (targetIdx >= 0) {
             selectorTargetY = HEADER_H + CAT_HEIGHT * targetIdx + 4;
         } else {
-            // If themes selected, move selector to themes button position (bottom area)
-            selectorTargetY = winH - PROFILE_H - CAT_HEIGHT - 8;
+            // Themes button: two CAT_HEIGHT slots above profile
+            float hudEdY = winH - PROFILE_H - CAT_HEIGHT - 2;
+            selectorTargetY = hudEdY - CAT_HEIGHT - 2;
         }
         renderSelectY = (float) Animate.lerp(renderSelectY, selectorTargetY, 0.15);
 
@@ -284,17 +289,27 @@ public class ClickGuiScreen extends Screen {
             ctx.drawTextWithShadow(client.textRenderer, name, (int) (winX + 26), (int) (catY + 8), textColor);
         }
 
-        // ─── Themes tab at bottom, above player profile ───
-        float themesY = winY + winH - PROFILE_H - CAT_HEIGHT - 8;
+        // ─── Bottom sidebar: Themes → HUD Editor → Profile ───
+        // Two buttons stacked above profile area
+        float hudEditorY = winY + winH - PROFILE_H - CAT_HEIGHT - 2;
+        float themesY = hudEditorY - CAT_HEIGHT - 2;
+
         RenderUtil.gradientLine(ctx, (int) winX + 10, (int) (themesY - 4), CAT_WIDTH - 14, 1, 0xFF333344, 0xFF222233);
 
+        // Themes button
         boolean themesHovered = mouseX >= winX && mouseX <= winX + CAT_WIDTH &&
                 mouseY >= themesY && mouseY < themesY + CAT_HEIGHT;
         boolean themesSelected = activeTab == SidebarTab.THEMES;
-
         int thCol = themesSelected ? 0xFFFFFFFF : (themesHovered ? 0xFFCCCCDD : 0xFF99AABB);
         ctx.drawTextWithShadow(client.textRenderer, "\u25C9", (int) (winX + 10), (int) (themesY + 8), thCol);
         ctx.drawTextWithShadow(client.textRenderer, "\u0422\u0435\u043C\u044B", (int) (winX + 26), (int) (themesY + 8), thCol);
+
+        // HUD Editor button (between Themes and Player profile)
+        boolean hudHovered = mouseX >= winX && mouseX <= winX + CAT_WIDTH &&
+                mouseY >= hudEditorY && mouseY < hudEditorY + CAT_HEIGHT;
+        int hudCol = hudHovered ? 0xFFCCCCDD : 0xFF99AABB;
+        ctx.drawTextWithShadow(client.textRenderer, "\u2699", (int) (winX + 10), (int) (hudEditorY + 8), hudCol);
+        ctx.drawTextWithShadow(client.textRenderer, "HUD Editor", (int) (winX + 26), (int) (hudEditorY + 8), hudCol);
     }
 
     // --- Player profile (bottom-left) ---
@@ -555,12 +570,12 @@ public class ClickGuiScreen extends Screen {
         // Gradient Speed slider
         ctx.drawTextWithShadow(client.textRenderer, "\u0421\u043A\u043E\u0440\u043E\u0441\u0442\u044C \u0433\u0440\u0430\u0434\u0438\u0435\u043D\u0442\u0430",
                 areaX + 14, (int) settingsY, 0xFFCCCCDD);
-        String gsVal = String.format("%.1f", gradientSpeed);
+        String gsVal = String.format("%.1f", ThemeUtil.getAnimationSpeed());
         ctx.drawTextWithShadow(client.textRenderer, gsVal,
                 areaX + areaW - client.textRenderer.getWidth(gsVal) - 14, (int) settingsY, colorAccent);
         settingsY += 12;
         int sliderX = areaX + 14, sliderW = areaW - 28;
-        float gsPercent = (gradientSpeed - 0.1f) / 2.9f;
+        float gsPercent = (ThemeUtil.getAnimationSpeed() - 0.1f) / 2.9f;
         RenderUtil.roundedRectSimple(ctx, sliderX, (int) settingsY, sliderW, 4, 2, 0xFF2A2D37);
         int gsFill = (int) (sliderW * gsPercent);
         if (gsFill > 0) RenderUtil.roundedRectSimple(ctx, sliderX, (int) settingsY, gsFill, 4, 2, colorAccent);
@@ -570,11 +585,11 @@ public class ClickGuiScreen extends Screen {
         // Glow Intensity slider
         ctx.drawTextWithShadow(client.textRenderer, "\u0418\u043D\u0442\u0435\u043D\u0441\u0438\u0432\u043D\u043E\u0441\u0442\u044C \u0441\u0432\u0435\u0447\u0435\u043D\u0438\u044F",
                 areaX + 14, (int) settingsY, 0xFFCCCCDD);
-        String giVal = String.format("%.1f", glowIntensity);
+        String giVal = String.format("%.1f", ThemeUtil.getGlowIntensity());
         ctx.drawTextWithShadow(client.textRenderer, giVal,
                 areaX + areaW - client.textRenderer.getWidth(giVal) - 14, (int) settingsY, colorAccent);
         settingsY += 12;
-        float giPercent = (glowIntensity - 0.0f) / 2.0f;
+        float giPercent = (ThemeUtil.getGlowIntensity() - 0.0f) / 2.0f;
         RenderUtil.roundedRectSimple(ctx, sliderX, (int) settingsY, sliderW, 4, 2, 0xFF2A2D37);
         int giFill = (int) (sliderW * giPercent);
         if (giFill > 0) RenderUtil.roundedRectSimple(ctx, sliderX, (int) settingsY, giFill, 4, 2, colorAccent);
@@ -660,11 +675,18 @@ public class ClickGuiScreen extends Screen {
                 }
             }
 
-            // Themes tab click (at bottom, above player profile)
-            float themesY = winY + winH - PROFILE_H - CAT_HEIGHT - 8;
+            // Themes tab click
+            float hudEditorY = winY + winH - PROFILE_H - CAT_HEIGHT - 2;
+            float themesY = hudEditorY - CAT_HEIGHT - 2;
             if (my >= themesY && my < themesY + CAT_HEIGHT) {
                 activeTab = SidebarTab.THEMES;
                 themeScrollY = 0;
+                return true;
+            }
+
+            // HUD Editor click (between themes and profile)
+            if (my >= hudEditorY && my < hudEditorY + CAT_HEIGHT) {
+                client.setScreen(new HUDEditorScreen());
                 return true;
             }
         }
@@ -729,6 +751,7 @@ public class ClickGuiScreen extends Screen {
         if (my >= gsSliderY - 3 && my <= gsSliderY + 7 && mx >= sliderX && mx <= sliderX + sliderW) {
             float pct = (float)(mx - sliderX) / sliderW;
             gradientSpeed = 0.1f + pct * 2.9f;
+            ThemeUtil.setAnimationSpeed(gradientSpeed);
             return true;
         }
         // Glow intensity slider
@@ -736,6 +759,7 @@ public class ClickGuiScreen extends Screen {
         if (my >= giSliderY - 3 && my <= giSliderY + 7 && mx >= sliderX && mx <= sliderX + sliderW) {
             float pct = (float)(mx - sliderX) / sliderW;
             glowIntensity = pct * 2.0f;
+            ThemeUtil.setGlowIntensity(glowIntensity);
             return true;
         }
         // Dark mode toggle
@@ -901,10 +925,10 @@ public class ClickGuiScreen extends Screen {
     }
 
     // --- Static accessors for theme settings (used by ConfigManager) ---
-    public static float getGradientSpeed() { return gradientSpeed; }
-    public static void setGradientSpeed(float v) { gradientSpeed = v; }
-    public static float getGlowIntensity() { return glowIntensity; }
-    public static void setGlowIntensity(float v) { glowIntensity = v; }
+    public static float getGradientSpeed() { return ThemeUtil.getAnimationSpeed(); }
+    public static void setGradientSpeed(float v) { gradientSpeed = v; ThemeUtil.setAnimationSpeed(v); }
+    public static float getGlowIntensity() { return ThemeUtil.getGlowIntensity(); }
+    public static void setGlowIntensity(float v) { glowIntensity = v; ThemeUtil.setGlowIntensity(v); }
     public static boolean isDarkMode() { return darkMode; }
     public static void setDarkMode(boolean v) { darkMode = v; }
     public static boolean isShadowEnabled() { return shadowEnabled; }

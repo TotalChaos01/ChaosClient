@@ -1,5 +1,6 @@
 package me.totalchaos01.chaosclient.notification;
 
+import me.totalchaos01.chaosclient.font.ChaosFont;
 import me.totalchaos01.chaosclient.util.render.Animate;
 import me.totalchaos01.chaosclient.util.render.ColorUtil;
 import me.totalchaos01.chaosclient.util.render.RenderUtil;
@@ -45,7 +46,7 @@ public class Notification {
 
     public void render(DrawContext ctx) {
         int sw = mc.getWindow().getScaledWidth();
-        int textW = Math.max(mc.textRenderer.getWidth(message), mc.textRenderer.getWidth(title));
+        int textW = Math.max(ChaosFont.getWidth(message), ChaosFont.getWidth(title));
         float targetX = sw - textW - 20;
 
         float elapsed = System.currentTimeMillis() - createdAt;
@@ -81,10 +82,10 @@ public class Notification {
                 Math.min(themeColor.getGreen() + 40, 255),
                 Math.min(themeColor.getBlue() + 20, 255)
         );
-        ctx.drawTextWithShadow(mc.textRenderer, title, (int) xVisual + 4, (int) yVisual + 1, ColorUtil.toARGB(bright));
+        ChaosFont.drawWithShadow(ctx, title, (int) xVisual + 4, (int) yVisual + 1, ColorUtil.toARGB(bright));
 
         // Message
-        ctx.drawTextWithShadow(mc.textRenderer, message, (int) xVisual + 4, (int) yVisual + 12, themeCARGB);
+        ChaosFont.drawWithShadow(ctx, message, (int) xVisual + 4, (int) yVisual + 12, themeCARGB);
     }
 
     // ─── Getters ──────────────────────────────────────────────

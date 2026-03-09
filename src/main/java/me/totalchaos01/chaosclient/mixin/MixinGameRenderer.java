@@ -14,14 +14,22 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(GameRenderer.class)
 public class MixinGameRenderer {
 
+    @Inject(method = "renderWorld", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/WorldRenderer;render", shift = At.Shift.AFTER), require = 0)
+    private void onAfterWorldRender(RenderTickCounter tickCounter, CallbackInfo ci) {
+        // Capture matrices right after WorldRenderer.render while the 3D projection is still set
+        float tickDelta = tickCounter.getTickProgress(true);
+        RenderUtil.captureMatrices(tickDelta);
+    }
+
     @Inject(method = "renderWorld", at = @At("RETURN"))
     private void onRenderWorld(RenderTickCounter tickCounter, CallbackInfo ci) {
         if (ChaosClient.getInstance() == null) return;
-        // Capture model-view and projection matrices for worldToScreen projection
-        RenderUtil.captureMatrices();
+        float tickDelta = tickCounter.getTickProgress(true);
+        // Fallback capture in case the INVOKE target didn't match
+        RenderUtil.captureMatrices(tickDelta);
         MatrixStack matrixStack = new MatrixStack();
         ChaosClient.getInstance().getEventBus().post(
-                new EventRender3D(matrixStack, tickCounter.getTickProgress(true))
+                new EventRender3D(matrixStack, tickDelta)
         );
     }
 }

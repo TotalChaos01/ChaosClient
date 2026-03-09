@@ -5,11 +5,10 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [],
   "client": [
-    "IMinecraftClientAccessor",
-    "ISimpleOptionAccessor",
     "MixinClientConnection",
     "MixinMinecraftClient",
     "MixinClientPlayerEntity",
+    "MixinClientPlayerEntityRotationSpoof",
     "MixinEntity",
     "MixinGameRenderer",
     "MixinInGameHud",
@@ -20,8 +19,14 @@
     "MixinMultiplayerScreen",
     "MixinSelectWorldScreen",
     "MixinChatScreen",
+    "MixinKeyboardInput",
     "MixinPlayerMovement",
-    "MixinRenderTickCounter"
+    "MixinRenderTickCounter",
+    "MixinBlockXray",
+    "MixinBobView",
+    "MixinHeldItemRenderer",
+    "MixinLivingEntityAntiBlind",
+    "MixinLivingEntitySwing"
   ],
   "injectors": {
     "defaultRequire": 1

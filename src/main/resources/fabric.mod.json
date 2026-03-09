@@ -3,13 +3,16 @@
   "id": "chaosclient",
   "version": "${version}",
   "name": "ChaosClient",
-  "description": "ChaosClient — Fabric клиент для Minecraft",
+  "description": "ChaosClient — встроенный клиент для Minecraft",
   "authors": ["totalchaos01"],
   "contact": {},
   "license": "All-Rights-Reserved",
   "icon": "assets/chaosclient/icon.png",
   "environment": "client",
   "entrypoints": {
+    "preLaunch": [
+      "me.totalchaos01.chaosclient.bootstrap.ChaosPreLaunch"
+    ],
     "client": [
       "me.totalchaos01.chaosclient.ChaosClient"
     ]
@@ -17,6 +20,17 @@
   "mixins": [
     "chaosclient.mixins.json"
   ],
+  "accessWidener": "chaosclient.accesswidener",
+  "custom": {
+    "modmenu": {
+      "badges": ["library"],
+      "parent": {
+        "id": "minecraft",
+        "name": "Minecraft",
+        "description": "Базовый клиент"
+      }
+    }
+  },
   "depends": {
     "fabricloader": ">=0.18.0",
     "minecraft": "~1.21.11",
